@@ -1,0 +1,36 @@
+# Environment
+.env
+*.env.local
+
+# Data volumes
+data/mysql/
+data/python/logs/
+data/frontend/logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.venv/
+*.egg-info/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+.npm/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
