@@ -33,8 +33,19 @@ package "Docker Stack" {
         package "Services" {
             component "AuthService" as auth_svc
             component "SubscriptionService" as sub_svc
-            component "PaymentService" as pay_svc
+            component "CheckoutOrchestrator" as checkout_svc
             component "InvoiceService" as inv_svc
+        }
+
+        package "Event System" #Wheat {
+            component "EventBus" as event_bus
+            component "PaymentHandlers" as pay_handlers
+            component "NotificationHandlers" as notif_handlers
+        }
+
+        package "Plugin System" #LightGreen {
+            component "PluginManager" as plugin_mgr
+            component "PaymentRegistry" as pay_registry
         }
 
         package "Models" {
@@ -87,13 +98,28 @@ api --> webhook_routes
 
 auth_routes --> auth_svc
 user_routes --> sub_svc
-checkout_routes --> pay_svc
+checkout_routes --> checkout_svc
 admin_routes --> inv_svc
+webhook_routes --> event_bus : "publish events"
+
+' Services to EventBus
+checkout_svc --> event_bus : "publish"
+checkout_svc --> pay_registry
+
+' EventBus to Handlers
+event_bus --> pay_handlers
+event_bus --> notif_handlers
+
+' Handlers to Services
+pay_handlers --> inv_svc
+pay_handlers --> sub_svc
+
+' Plugin system
+plugin_mgr --> pay_registry
 
 ' Services to models
 auth_svc --> user_model
 sub_svc --> sub_model
-pay_svc --> invoice_model
 inv_svc --> invoice_model
 
 ' Models to database
@@ -103,10 +129,10 @@ plan_model --> db_plan
 sub_model --> db_sub
 invoice_model --> db_invoice
 
-' External integrations
-pay_svc --> paypal
-pay_svc --> stripe
-inv_svc --> email
+' External integrations (via plugins)
+pay_registry --> paypal : "PayPalPlugin"
+pay_registry --> stripe : "StripePlugin"
+notif_handlers --> email
 
 ' Webhooks from providers
 paypal --> webhook_routes : Webhooks
@@ -131,6 +157,22 @@ note right of paypal
     - Subscription renewed
     - Payment failed
     - Refund processed
+end note
+
+note bottom of event_bus
+    **Event-Driven Architecture**
+    - Webhooks → Domain Events
+    - EventBus dispatches to handlers
+    - Handlers invoke services
+    - Decoupled, async processing
+end note
+
+note bottom of plugin_mgr
+    **Plugin System**
+    - Provider-agnostic payments
+    - Extensible via plugins
+    - StripePlugin, PayPalPlugin
+    - ManualPaymentPlugin
 end note
 
 @enduml

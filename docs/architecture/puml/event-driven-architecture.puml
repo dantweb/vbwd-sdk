@@ -1,0 +1,140 @@
+@startuml event-driven-architecture
+!theme plain
+title Event-Driven Architecture
+
+skinparam componentStyle rectangle
+skinparam roundcorner 10
+skinparam packageStyle rectangle
+
+' ==================
+' EVENT SOURCES
+' ==================
+
+package "Event Sources" as sources #LightBlue {
+    component "Webhook\nRoutes" as webhook_routes
+    component "Checkout\nOrchestrator" as checkout_orch
+    component "Subscription\nService" as sub_service
+    component "User\nService" as user_service
+}
+
+' ==================
+' EVENT BUS
+' ==================
+
+package "Event Bus" as bus_layer #LightYellow {
+    component "EventBus" as event_bus
+
+    note right of event_bus
+        Central pub/sub system
+        - subscribe(handler)
+        - publish(event)
+        - async dispatch
+    end note
+}
+
+' ==================
+' DOMAIN EVENTS
+' ==================
+
+package "Domain Events" as events #LightGreen {
+    component "PaymentCompletedEvent" as payment_completed
+    component "PaymentFailedEvent" as payment_failed
+    component "InvoiceCreatedEvent" as invoice_created
+    component "SubscriptionActivatedEvent" as sub_activated
+    component "SubscriptionExpiredEvent" as sub_expired
+    component "UserCreditsDepletedEvent" as credits_depleted
+}
+
+' ==================
+' EVENT HANDLERS
+' ==================
+
+package "Event Handlers" as handlers #LightPink {
+    component "PaymentCompleted\nHandler" as payment_handler
+    component "PaymentFailed\nHandler" as failed_handler
+    component "Subscription\nHandler" as sub_handler
+    component "Notification\nHandler" as notif_handler
+    component "Email\nHandler" as email_handler
+}
+
+' ==================
+' SERVICES (Called by Handlers)
+' ==================
+
+package "Domain Services" as services #LightGray {
+    component "Invoice\nService" as invoice_svc
+    component "Subscription\nService" as subscription_svc
+    component "User\nService" as user_svc
+}
+
+' ==================
+' EXTERNAL GATEWAYS
+' ==================
+
+package "External Gateways" as gateways {
+    component "Email\nGateway" as email_gw
+    component "Push\nNotification" as push_gw
+}
+
+' ==================
+' RELATIONSHIPS - Event Publishing
+' ==================
+
+webhook_routes --> event_bus : "publish"
+checkout_orch --> event_bus : "publish"
+sub_service --> event_bus : "publish"
+user_service --> event_bus : "publish"
+
+' ==================
+' RELATIONSHIPS - Event Types
+' ==================
+
+webhook_routes ..> payment_completed : creates
+webhook_routes ..> payment_failed : creates
+checkout_orch ..> invoice_created : creates
+sub_service ..> sub_activated : creates
+sub_service ..> sub_expired : creates
+user_service ..> credits_depleted : creates
+
+' ==================
+' RELATIONSHIPS - Event Dispatch
+' ==================
+
+event_bus --> payment_handler : "payment.completed"
+event_bus --> failed_handler : "payment.failed"
+event_bus --> sub_handler : "subscription.*"
+event_bus --> notif_handler : "user.*"
+event_bus --> email_handler : "all events"
+
+' ==================
+' RELATIONSHIPS - Handler to Service
+' ==================
+
+payment_handler --> invoice_svc
+payment_handler --> subscription_svc
+failed_handler --> invoice_svc
+sub_handler --> subscription_svc
+sub_handler --> user_svc
+notif_handler --> push_gw
+email_handler --> email_gw
+
+' ==================
+' NOTES
+' ==================
+
+note top of sources
+    **Event Sources**
+    Components that publish
+    domain events when
+    significant actions occur.
+end note
+
+note bottom of handlers
+    **Event Handlers**
+    React to events and
+    orchestrate business logic.
+    Handlers are decoupled
+    from event sources.
+end note
+
+@enduml

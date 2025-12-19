@@ -28,6 +28,26 @@ package "Payment Service Layer\n(Provider-Agnostic Business Logic)" as service_l
 }
 
 ' ==================
+' EVENT-DRIVEN LAYER
+' ==================
+
+package "Event-Driven Layer" as event_layer #Wheat {
+    component "EventBus" as event_bus
+
+    package "Domain Events" as domain_events {
+        component "PaymentCompleted" as evt_completed
+        component "PaymentFailed" as evt_failed
+        component "InvoiceCreated" as evt_invoice
+    }
+
+    package "Event Handlers" as evt_handlers {
+        component "PaymentCompleted\nHandler" as handler_completed
+        component "Subscription\nHandler" as handler_sub
+        component "Email\nHandler" as handler_email
+    }
+}
+
+' ==================
 ' PAYMENT METHOD ABSTRACTION
 ' ==================
 
@@ -113,6 +133,19 @@ checkout_routes --> checkout_orch
 webhook_routes --> webhook_handler
 invoice_routes --> billing_svc
 
+' Service to EventBus (publish events)
+checkout_orch --> event_bus : publish
+webhook_handler --> event_bus : publish
+
+' EventBus to Handlers (dispatch)
+event_bus --> handler_completed
+event_bus --> handler_sub
+event_bus --> handler_email
+
+' Handlers to Services
+handler_completed --> billing_svc
+handler_sub --> billing_svc
+
 ' Service to Methods
 checkout_orch --> i_method
 checkout_orch --> registry
@@ -155,6 +188,13 @@ note right of service_layer
     **Provider-Agnostic**
     No provider-specific code.
     Uses interfaces and normalized types.
+end note
+
+note right of event_layer
+    **Event-Driven Architecture**
+    Services publish domain events.
+    Handlers process business logic.
+    Decoupled, async processing.
 end note
 
 note right of method_layer

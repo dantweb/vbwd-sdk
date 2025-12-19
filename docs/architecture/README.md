@@ -659,6 +659,7 @@ All architecture diagrams are available in PlantUML format:
 | Invoice Lifecycle      | `puml/invoice-lifecycle.puml`     | Invoice state machine             |
 | Payment Flow           | `puml/payment-flow.puml`          | Payment processing sequence       |
 | Payment Architecture   | `puml/payment-architecture.puml`  | Provider-agnostic payment layers  |
+| Event-Driven Architecture | `puml/event-driven-architecture.puml` | Event bus and handlers     |
 
 ---
 
