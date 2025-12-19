@@ -1,0 +1,260 @@
+@startuml data-model
+!theme plain
+title VBWD-SDK Data Model (ERD)
+
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+' ==================
+' USER DOMAIN
+' ==================
+
+entity "user" as user {
+    * **id** : BIGINT <<PK>>
+    --
+    * email : VARCHAR(255) <<UNIQUE>>
+    * password_hash : VARCHAR(255)
+    * status : ENUM
+    * role : ENUM
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    status: pending | active | suspended | deleted
+    role: user | admin
+}
+
+entity "user_details" as user_details {
+    * **id** : BIGINT <<PK>>
+    --
+    * user_id : BIGINT <<FK>> <<UNIQUE>>
+    first_name : VARCHAR(100)
+    last_name : VARCHAR(100)
+    address_line_1 : VARCHAR(255)
+    address_line_2 : VARCHAR(255)
+    city : VARCHAR(100)
+    postal_code : VARCHAR(20)
+    country : VARCHAR(2)
+    phone : VARCHAR(20)
+    * created_at : DATETIME
+    * updated_at : DATETIME
+}
+
+entity "user_case" as user_case {
+    * **id** : BIGINT <<PK>>
+    --
+    * user_id : BIGINT <<FK>>
+    description : TEXT
+    date_started : DATE
+    * status : ENUM
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    status: draft | active | completed | archived
+}
+
+' ==================
+' CURRENCY & TAX
+' ==================
+
+entity "currency" as currency {
+    * **id** : BIGINT <<PK>>
+    --
+    * code : VARCHAR(3) <<UNIQUE>>
+    * name : VARCHAR(100)
+    * symbol : VARCHAR(10)
+    * exchange_rate : DECIMAL(10,6)
+    * is_default : BOOLEAN
+    * is_active : BOOLEAN
+    decimal_places : INT
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    Default currency has exchange_rate = 1.0
+    All prices stored in default currency
+}
+
+entity "tax" as tax {
+    * **id** : BIGINT <<PK>>
+    --
+    * name : VARCHAR(100)
+    * code : VARCHAR(50) <<UNIQUE>>
+    description : TEXT
+    * rate : DECIMAL(5,2)
+    country_code : VARCHAR(2)
+    region_code : VARCHAR(10)
+    * is_active : BOOLEAN
+    * is_inclusive : BOOLEAN
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    rate: percentage (19.0 = 19%)
+    is_inclusive: prices include tax
+}
+
+entity "tax_rate" as tax_rate {
+    * **id** : BIGINT <<PK>>
+    --
+    * tax_id : BIGINT <<FK>>
+    * rate : DECIMAL(5,2)
+    * valid_from : DATE
+    valid_to : DATE
+    * created_at : DATETIME
+    --
+    Historical rates for auditing
+}
+
+' ==================
+' TARIFF PLANS
+' ==================
+
+entity "tarif_plan" as tarif_plan {
+    * **id** : BIGINT <<PK>>
+    --
+    * name : VARCHAR(100)
+    * slug : VARCHAR(100) <<UNIQUE>>
+    description : TEXT
+    * price : DECIMAL(10,2)
+    * currency : VARCHAR(3)
+    * billing_period : ENUM
+    features : JSON
+    * is_active : BOOLEAN
+    sort_order : INT
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    billing_period: monthly | quarterly | yearly | one_time
+    price: base price in default currency
+}
+
+entity "tarif_plan_price" as tarif_plan_price {
+    * **id** : BIGINT <<PK>>
+    --
+    * tarif_plan_id : BIGINT <<FK>>
+    * currency_id : BIGINT <<FK>>
+    * price : DECIMAL(10,2)
+    * is_auto_calculated : BOOLEAN
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    Override prices per currency
+    is_auto_calculated: true = from exchange rate
+}
+
+' ==================
+' SUBSCRIPTIONS
+' ==================
+
+entity "subscription" as subscription {
+    * **id** : BIGINT <<PK>>
+    --
+    * user_id : BIGINT <<FK>>
+    * tarif_plan_id : BIGINT <<FK>>
+    * status : ENUM
+    started_at : DATETIME
+    expires_at : DATETIME
+    cancelled_at : DATETIME
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    status: active | inactive | cancelled | expired
+}
+
+' ==================
+' INVOICES
+' ==================
+
+entity "user_invoice" as user_invoice {
+    * **id** : BIGINT <<PK>>
+    --
+    * user_id : BIGINT <<FK>>
+    * tarif_plan_id : BIGINT <<FK>>
+    subscription_id : BIGINT <<FK>>
+    * invoice_number : VARCHAR(50) <<UNIQUE>>
+    * amount : DECIMAL(10,2)
+    net_amount : DECIMAL(10,2)
+    tax_amount : DECIMAL(10,2)
+    tax_code : VARCHAR(50)
+    tax_rate : DECIMAL(5,2)
+    * currency : VARCHAR(3)
+    * status : ENUM
+    payment_method : ENUM
+    payment_ref : VARCHAR(255)
+    * invoiced_at : DATETIME
+    paid_at : DATETIME
+    expires_at : DATETIME
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    status: invoiced | paid | expired | cancelled
+    payment_method: paypal | stripe | manual
+    amount = net_amount + tax_amount
+}
+
+' ==================
+' RELATIONSHIPS
+' ==================
+
+' User relationships
+user ||--o| user_details : "has"
+user ||--o{ user_case : "has"
+user ||--o{ subscription : "has"
+user ||--o{ user_invoice : "has"
+
+' Tax relationships
+tax ||--o{ tax_rate : "has history"
+
+' Tariff plan relationships
+tarif_plan ||--o{ tarif_plan_price : "has prices"
+tarif_plan ||--o{ subscription : "used in"
+tarif_plan ||--o{ user_invoice : "billed for"
+
+' Currency relationships
+currency ||--o{ tarif_plan_price : "prices in"
+
+' Subscription relationships
+subscription ||--o{ user_invoice : "generates"
+
+' ==================
+' NOTES
+' ==================
+
+note right of user
+    Core user entity with
+    login credentials and status.
+    Private data separated to
+    user_details for GDPR compliance.
+end note
+
+note right of currency
+    One currency is default (is_default=true).
+    All base prices stored in default currency.
+    exchange_rate relative to default.
+    Example: EUR=1.0, USD=1.08
+end note
+
+note right of tax
+    VAT and regional taxes.
+    country_code for EU VAT.
+    region_code for US state taxes.
+    Historical rates in tax_rate.
+end note
+
+note right of tarif_plan_price
+    Multi-currency pricing.
+    Override calculated prices
+    with fixed amounts per currency.
+end note
+
+note bottom of user_invoice
+    Full tax breakdown stored.
+    net_amount: before tax
+    tax_amount: VAT/tax portion
+    amount: total (gross)
+end note
+
+@enduml

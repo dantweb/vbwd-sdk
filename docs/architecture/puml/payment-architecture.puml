@@ -1,0 +1,193 @@
+@startuml payment-architecture
+!theme plain
+title Payment Architecture - Provider-Agnostic Platform
+
+skinparam componentStyle rectangle
+skinparam roundcorner 10
+skinparam packageStyle rectangle
+
+' ==================
+' APPLICATION LAYER
+' ==================
+
+package "Application Layer" as app_layer {
+    component "Checkout\nRoutes" as checkout_routes
+    component "Webhook\nRoutes" as webhook_routes
+    component "Invoice\nRoutes" as invoice_routes
+}
+
+' ==================
+' PAYMENT SERVICE LAYER
+' ==================
+
+package "Payment Service Layer\n(Provider-Agnostic Business Logic)" as service_layer #LightBlue {
+    component "Checkout\nOrchestrator" as checkout_orch
+    component "Payment\nWebhook Handler" as webhook_handler
+    component "Subscription\nBilling Service" as billing_svc
+    component "Refund\nService" as refund_svc
+}
+
+' ==================
+' PAYMENT METHOD ABSTRACTION
+' ==================
+
+package "Payment Method Abstraction\n(Strategy Pattern)" as method_layer #LightGreen {
+    component "<<interface>>\nIPaymentMethod" as i_method
+
+    component "Card\nPayment" as card_method
+    component "Invoice\n(Pay Later)" as invoice_method
+    component "Wallet\nPayment" as wallet_method
+    component "BNPL\nPayment" as bnpl_method
+    component "Bank\nTransfer" as bank_method
+
+    card_method ..|> i_method
+    invoice_method ..|> i_method
+    wallet_method ..|> i_method
+    bnpl_method ..|> i_method
+    bank_method ..|> i_method
+}
+
+' ==================
+' PROVIDER ADAPTER LAYER
+' ==================
+
+package "Provider Adapter Layer\n(Unified Interface)" as adapter_layer #LightYellow {
+    component "<<interface>>\nIPaymentProviderAdapter" as i_adapter
+
+    component "Plugin\nRegistry" as registry
+}
+
+' ==================
+' PLUGIN SYSTEM
+' ==================
+
+package "Plugin System\n(Payment Provider Plugins)" as plugin_layer #LightPink {
+    component "Stripe\nPlugin" as stripe_plugin
+    component "PayPal\nPlugin" as paypal_plugin
+    component "Klarna\nPlugin" as klarna_plugin
+    component "Manual/Invoice\nPlugin" as manual_plugin
+
+    stripe_plugin ..|> i_adapter
+    paypal_plugin ..|> i_adapter
+    klarna_plugin ..|> i_adapter
+    manual_plugin ..|> i_adapter
+}
+
+' ==================
+' SDK ADAPTER LAYER
+' ==================
+
+package "SDK Adapter Layer\n(Provider SDK Wrappers)" as sdk_layer #LightGray {
+    component "Stripe\nSDK Client" as stripe_sdk
+    component "PayPal\nREST Client" as paypal_sdk
+    component "Klarna\nSDK Client" as klarna_sdk
+    component "HTTP\nClient" as http_client
+}
+
+' ==================
+' EXTERNAL SERVICES
+' ==================
+
+cloud "External Services" as external {
+    component "Stripe API" as stripe_api
+    component "PayPal API" as paypal_api
+    component "Klarna API" as klarna_api
+}
+
+' ==================
+' DATA TYPES
+' ==================
+
+package "Normalized Data Types" as types {
+    component "PaymentIntent" as payment_intent
+    component "CheckoutSession" as checkout_session
+    component "WebhookEvent" as webhook_event
+}
+
+' ==================
+' RELATIONSHIPS
+' ==================
+
+' App to Service
+checkout_routes --> checkout_orch
+webhook_routes --> webhook_handler
+invoice_routes --> billing_svc
+
+' Service to Methods
+checkout_orch --> i_method
+checkout_orch --> registry
+
+' Service to Adapter
+webhook_handler --> registry
+billing_svc --> registry
+refund_svc --> registry
+
+' Registry to Plugins
+registry --> stripe_plugin
+registry --> paypal_plugin
+registry --> klarna_plugin
+registry --> manual_plugin
+
+' Plugins to SDK
+stripe_plugin --> stripe_sdk
+paypal_plugin --> paypal_sdk
+klarna_plugin --> klarna_sdk
+manual_plugin --> http_client
+
+' SDK to External
+stripe_sdk --> stripe_api
+paypal_sdk --> paypal_api
+klarna_sdk --> klarna_api
+
+' Method compatibility
+card_method ..> stripe_plugin : compatible
+card_method ..> paypal_plugin : compatible
+invoice_method ..> manual_plugin : compatible
+invoice_method ..> klarna_plugin : compatible
+bnpl_method ..> klarna_plugin : compatible
+wallet_method ..> paypal_plugin : compatible
+
+' ==================
+' NOTES
+' ==================
+
+note right of service_layer
+    **Provider-Agnostic**
+    No provider-specific code.
+    Uses interfaces and normalized types.
+end note
+
+note right of method_layer
+    **IPaymentMethod Interface**
+    - method_type: str
+    - requires_redirect: bool
+    - supports_recurring: bool
+    - get_compatible_providers()
+    - validate_payment_details()
+end note
+
+note right of plugin_layer
+    **IPaymentProviderAdapter**
+    - provider_name: str
+    - supported_payment_methods
+    - create_checkout_session()
+    - capture_payment()
+    - refund_payment()
+    - verify_webhook_signature()
+    - parse_webhook_event()
+end note
+
+note right of sdk_layer
+    **SDK Wrappers**
+    Handle authentication,
+    serialization, retries.
+end note
+
+note bottom of types
+    **Normalized Data Types**
+    PaymentIntent: id, provider, amount, status
+    CheckoutSession: id, checkout_url, expires_at
+    WebhookEvent: id, type, provider, invoice_id
+end note
+
+@enduml

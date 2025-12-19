@@ -1,0 +1,136 @@
+@startuml system-architecture
+!theme plain
+title VBWD-SDK System Architecture
+
+skinparam componentStyle rectangle
+skinparam roundcorner 10
+
+' External actors
+actor "End User" as user
+actor "Admin" as admin
+
+' Docker boundary
+package "Docker Stack" {
+
+    ' Frontend container
+    package "frontend (Vue.js 3)" as frontend_container {
+        component "User App\n/user/" as user_app
+        component "Admin App\n/admin/" as admin_app
+    }
+
+    ' Python container
+    package "python (Flask API)" as python_container {
+        component "REST API\n/api/v1/*" as api
+
+        package "Routes" {
+            component "auth" as auth_routes
+            component "user" as user_routes
+            component "checkout" as checkout_routes
+            component "admin" as admin_routes
+            component "webhooks" as webhook_routes
+        }
+
+        package "Services" {
+            component "AuthService" as auth_svc
+            component "SubscriptionService" as sub_svc
+            component "PaymentService" as pay_svc
+            component "InvoiceService" as inv_svc
+        }
+
+        package "Models" {
+            component "User" as user_model
+            component "UserDetails" as details_model
+            component "TarifPlan" as plan_model
+            component "Subscription" as sub_model
+            component "UserInvoice" as invoice_model
+        }
+    }
+
+    ' MySQL container
+    database "mysql" as mysql {
+        storage "user" as db_user
+        storage "user_details" as db_details
+        storage "tarif_plan" as db_plan
+        storage "subscription" as db_sub
+        storage "user_invoice" as db_invoice
+    }
+
+    ' Data volumes
+    folder "data/" as volumes {
+        folder "python/logs/" as py_logs
+        folder "frontend/logs/" as fe_logs
+        folder "mysql/" as mysql_data
+    }
+}
+
+' External services
+cloud "External Services" {
+    component "PayPal API" as paypal
+    component "Stripe API" as stripe
+    component "Email Service\n(SMTP)" as email
+}
+
+' User connections
+user --> user_app : HTTPS
+admin --> admin_app : HTTPS
+
+' Frontend to API
+user_app --> api : HTTP/REST
+admin_app --> api : HTTP/REST
+
+' API internal flow
+api --> auth_routes
+api --> user_routes
+api --> checkout_routes
+api --> admin_routes
+api --> webhook_routes
+
+auth_routes --> auth_svc
+user_routes --> sub_svc
+checkout_routes --> pay_svc
+admin_routes --> inv_svc
+
+' Services to models
+auth_svc --> user_model
+sub_svc --> sub_model
+pay_svc --> invoice_model
+inv_svc --> invoice_model
+
+' Models to database
+user_model --> db_user
+details_model --> db_details
+plan_model --> db_plan
+sub_model --> db_sub
+invoice_model --> db_invoice
+
+' External integrations
+pay_svc --> paypal
+pay_svc --> stripe
+inv_svc --> email
+
+' Webhooks from providers
+paypal --> webhook_routes : Webhooks
+stripe --> webhook_routes : Webhooks
+
+' Logging
+python_container ..> py_logs : logs
+frontend_container ..> fe_logs : logs
+mysql ..> mysql_data : data
+
+note right of api
+    Headless REST API
+    - JWT Authentication
+    - Rate Limiting
+    - Input Validation
+end note
+
+note right of paypal
+    Payment providers send
+    webhook notifications for:
+    - Payment completed
+    - Subscription renewed
+    - Payment failed
+    - Refund processed
+end note
+
+@enduml

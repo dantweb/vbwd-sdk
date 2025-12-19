@@ -1,0 +1,65 @@
+@startuml subscription-lifecycle
+!theme plain
+title Subscription State Machine
+
+skinparam state {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+[*] --> inactive : User selects plan
+
+state inactive {
+    inactive : Subscription created
+    inactive : Awaiting payment
+}
+
+inactive --> active : Payment confirmed\n(webhook received)
+inactive --> [*] : Payment expired\n(no payment within deadline)
+
+state active {
+    active : Services accessible
+    active : Auto-renewal enabled (if recurring)
+}
+
+active --> active : Renewal payment\nsuccessful
+active --> cancelled : User cancels\nsubscription
+active --> expired : Subscription period\nended (no renewal)
+
+state cancelled {
+    cancelled : User requested cancellation
+    cancelled : Services remain active\nuntil period ends
+}
+
+cancelled --> expired : Period ends\n(grace period over)
+
+state expired {
+    expired : Services inaccessible
+    expired : Can be reactivated
+}
+
+expired --> active : User resubscribes\nand pays
+
+note right of active
+    **Active subscription:**
+    - User has full access to services
+    - If recurring: auto-renewal attempts
+    - If one-time: expires at period end
+end note
+
+note right of cancelled
+    **Cancelled subscription:**
+    - No future charges
+    - Access continues until expires_at
+    - User can resubscribe anytime
+end note
+
+note left of expired
+    **Expired subscription:**
+    - No service access
+    - Historical data retained
+    - User can purchase new subscription
+end note
+
+@enduml

@@ -1,0 +1,119 @@
+@startuml user-flow
+!theme plain
+title End-User Purchase Journey
+
+skinparam activityShape roundBox
+skinparam roundcorner 15
+
+|#LightBlue|User|
+|#LightGreen|Frontend|
+|#LightYellow|Backend API|
+|#LightPink|Payment Provider|
+
+|User|
+start
+
+:Visit landing page;
+
+|Frontend|
+:Display marketing content\nand value proposition;
+
+|User|
+:Browse tariff plans;
+
+|Frontend|
+:Fetch tariff plans;
+
+|Backend API|
+:GET /api/v1/tarif-plans\nReturn active plans;
+
+|Frontend|
+:Display pricing table\nwith features comparison;
+
+|User|
+:Select tariff plan\nClick "Subscribe";
+
+if (Already registered?) then (yes)
+    |Frontend|
+    :Show login form;
+
+    |User|
+    :Enter email & password;
+
+    |Backend API|
+    :POST /api/v1/auth/login\nValidate credentials\nReturn JWT token;
+else (no)
+    |Frontend|
+    :Show registration form;
+
+    |User|
+    :Enter email & password;
+
+    |Backend API|
+    :POST /api/v1/auth/register\nCreate user (status: pending)\nReturn JWT token;
+endif
+
+|Frontend|
+:Store JWT token\nShow checkout page;
+
+|User|
+:Review order summary\nEnter billing details\n(name, address, phone);
+
+|Backend API|
+:PUT /api/v1/user/details\nSave user_details;
+
+|User|
+:Select payment method\n(PayPal or Stripe);
+
+|Frontend|
+:Request checkout session;
+
+|Backend API|
+:POST /api/v1/checkout/create\n- Create user_invoice (status: invoiced)\n- Create payment session with provider\n- Return checkout URL;
+
+|Frontend|
+:Redirect to payment provider;
+
+|Payment Provider|
+:Display payment form\nProcess payment;
+
+|User|
+:Complete payment;
+
+|Payment Provider|
+:Send webhook notification;
+
+|Backend API|
+:POST /api/v1/webhooks/{provider}\n- Verify webhook signature\n- Update invoice (status: paid)\n- Create subscription (status: active)\n- Update user (status: active)\n- Send confirmation email;
+
+|Payment Provider|
+:Redirect user back;
+
+|Frontend|
+:POST /api/v1/checkout/confirm\nVerify payment status;
+
+|Backend API|
+:Return subscription details;
+
+|Frontend|
+:Display confirmation page\n"Thank you for subscribing!";
+
+|User|
+:Access subscribed services;
+
+stop
+
+note right
+    **Data Created:**
+    1. user (if new)
+    2. user_details
+    3. subscription
+    4. user_invoice
+
+    **Emails Sent:**
+    - Welcome email (new users)
+    - Payment confirmation
+    - Invoice/receipt
+end note
+
+@enduml

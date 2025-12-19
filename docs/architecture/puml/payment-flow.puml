@@ -1,0 +1,125 @@
+@startuml payment-flow
+!theme plain
+title Payment Processing Flow
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam roundcorner 10
+
+actor "User" as user
+participant "Frontend\n(Vue.js)" as frontend
+participant "Backend API\n(Flask)" as backend
+database "MySQL" as db
+participant "Payment Provider\n(PayPal/Stripe)" as provider
+participant "Email\nService" as email
+
+== Checkout Initiation ==
+
+user -> frontend : Click "Pay Now"
+activate frontend
+
+frontend -> backend : POST /api/v1/checkout/create\n{tarif_plan_id, payment_method}
+activate backend
+
+backend -> db : Create user_invoice\n(status: invoiced)
+db --> backend : invoice_id
+
+backend -> provider : Create checkout session\n{amount, currency, success_url, cancel_url}
+activate provider
+provider --> backend : {session_id, checkout_url}
+deactivate provider
+
+backend --> frontend : {checkout_url, invoice_id}
+deactivate backend
+
+frontend -> user : Redirect to payment provider
+deactivate frontend
+
+== Payment Processing ==
+
+user -> provider : Complete payment form
+activate provider
+
+provider -> provider : Process payment\n(validate card, charge)
+
+alt Payment Successful
+    provider --> user : Redirect to success_url
+
+    provider -> backend : POST /api/v1/webhooks/{provider}\n{event: payment.completed, payment_ref}
+    activate backend
+
+    backend -> backend : Verify webhook signature
+
+    backend -> db : Update invoice\n(status: paid, paid_at, payment_ref)
+
+    backend -> db : Create/activate subscription\n(status: active, started_at, expires_at)
+
+    backend -> db : Update user\n(status: active)
+
+    backend -> email : Send confirmation email
+    activate email
+    email --> backend : OK
+    deactivate email
+
+    backend --> provider : 200 OK
+    deactivate backend
+
+else Payment Failed
+    provider --> user : Redirect to cancel_url
+
+    provider -> backend : POST /api/v1/webhooks/{provider}\n{event: payment.failed}
+    activate backend
+
+    backend -> db : Update invoice\n(status: cancelled)
+
+    backend --> provider : 200 OK
+    deactivate backend
+end
+
+deactivate provider
+
+== Payment Confirmation ==
+
+user -> frontend : Return from provider
+activate frontend
+
+frontend -> backend : POST /api/v1/checkout/confirm\n{invoice_id}
+activate backend
+
+backend -> db : Get invoice & subscription status
+db --> backend : {invoice, subscription}
+
+backend --> frontend : {success: true, subscription}
+deactivate backend
+
+alt Payment Confirmed
+    frontend -> user : Show success page\n"Thank you for subscribing!"
+else Payment Not Confirmed
+    frontend -> user : Show error page\n"Payment could not be verified"
+end
+
+deactivate frontend
+
+== Subscription Renewal (Recurring) ==
+
+note over provider, backend
+    For recurring subscriptions, payment provider
+    automatically charges at billing interval
+end note
+
+provider -> backend : POST /api/v1/webhooks/{provider}\n{event: subscription.renewed}
+activate backend
+
+backend -> db : Create new invoice\n(status: paid)
+
+backend -> db : Update subscription\n(expires_at extended)
+
+backend -> email : Send renewal confirmation
+activate email
+email --> backend : OK
+deactivate email
+
+backend --> provider : 200 OK
+deactivate backend
+
+@enduml

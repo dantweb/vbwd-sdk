@@ -1,0 +1,68 @@
+@startuml invoice-lifecycle
+!theme plain
+title Invoice State Machine
+
+skinparam state {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+[*] --> invoiced : Checkout initiated
+
+state invoiced {
+    invoiced : Invoice created
+    invoiced : Awaiting payment
+}
+
+invoiced --> paid : Payment received\nand verified
+invoiced --> invoice_expired : Payment deadline\npassed
+invoiced --> invoice_cancelled : Cancelled by\nadmin/system
+
+state paid {
+    paid : Payment confirmed
+    paid : Receipt generated
+}
+
+state invoice_expired {
+    invoice_expired : No payment received
+    invoice_expired : Invoice void
+}
+
+state invoice_cancelled {
+    invoice_cancelled : Manually cancelled
+    invoice_cancelled : No charge applied
+}
+
+paid --> [*]
+invoice_expired --> [*]
+invoice_cancelled --> [*]
+
+note right of invoiced
+    **Invoiced:**
+    - Created when user initiates checkout
+    - Has payment deadline (expires_at)
+    - Waiting for payment provider callback
+end note
+
+note right of paid
+    **Paid:**
+    - Webhook confirmed payment
+    - payment_ref stored
+    - Triggers subscription activation
+end note
+
+note left of invoice_expired
+    **Expired:**
+    - No payment within deadline
+    - User can retry with new invoice
+end note
+
+note left of invoice_cancelled
+    **Cancelled:**
+    - Admin or system cancelled
+    - Payment was declined
+    - User can retry
+end note
+
+@enduml

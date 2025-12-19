@@ -1,6 +1,6 @@
 # VBWD-SDK Architecture
 
-**Project:** VBWD-SDK - Express Medical Diagnostics Platform
+**Project:** VBWD-SDK - Digital Subscriptions & SaaS Sales Platform
 **Status:** Initial Development
 **License:** CC0 1.0 Universal (Public Domain)
 
@@ -8,7 +8,17 @@
 
 ## 1. Project Overview
 
-VBWD-SDK is an iframed web application for express diagnostics in medical fields (e.g., dermatology). Users submit images and data through a multi-step form, which are validated, processed, and sent to a custom diagnostic API. Results are delivered via email.
+VBWD-SDK is a headless Python Flask API backend for digital subscriptions and SaaS sales. The platform provides:
+
+- **User management** with separated public/private data
+- **Tariff plans** for subscription-based services
+- **Subscription lifecycle** management
+- **Invoice & payment processing** via PayPal/Stripe
+- **Primitive internal admin** for basic operations
+
+### Business Model
+
+Users browse tariff plans on a static frontend, select a plan, proceed to checkout, and complete payment via PayPal or Stripe. The backend manages subscriptions, invoices, and user data.
 
 ---
 
@@ -17,420 +27,603 @@ VBWD-SDK is an iframed web application for express diagnostics in medical fields
 ### 2.1 Container Architecture (Docker)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        VBWD-SDK Stack                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │  frontend   │    │   python    │    │    mysql    │         │
-│  │  (Vue.js)   │◄──►│  (Flask)    │◄──►│    (DB)     │         │
-│  └─────────────┘    └─────────────┘    └─────────────┘         │
-│        │                  │                   │                 │
-│        │                  │                   │                 │
-│        ▼                  ▼                   ▼                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    data/ (volumes)                       │   │
-│  │  ├── python/logs/                                        │   │
-│  │  ├── frontend/logs/                                      │   │
-│  │  └── mysql/ (binary data)                                │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------------+
+|                        VBWD-SDK Stack                                |
++---------------------------------------------------------------------+
+|                                                                      |
+|   +--------------+     +---------------+     +--------------+        |
+|   |  frontend    |     |    python     |     |    mysql     |        |
+|   |  (Vue.js)    |<--->|   (Flask)     |<--->|    (DB)      |        |
+|   +--------------+     +---------------+     +--------------+        |
+|         |                    |                     |                 |
+|         |                    |                     |                 |
+|         v                    v                     v                 |
+|   +---------------------------------------------------------------+  |
+|   |                    data/ (volumes)                            |  |
+|   |   +-- python/logs/                                            |  |
+|   |   +-- frontend/logs/                                          |  |
+|   |   +-- mysql/ (binary data)                                    |  |
+|   +---------------------------------------------------------------+  |
+|                                                                      |
+|                    +-------------------------+                       |
+|                    |  External Services      |                       |
+|                    |  - PayPal API           |                       |
+|                    |  - Stripe API           |                       |
+|                    |  - Email Service        |                       |
+|                    +-------------------------+                       |
+|                                                                      |
++---------------------------------------------------------------------+
 ```
 
 ### 2.2 Technology Stack
 
-| Layer      | Technology   | Container  |
-|------------|--------------|------------|
-| Frontend   | Vue.js 3     | frontend   |
-| Backend    | Python 3 / Flask | python |
-| Database   | MySQL        | mysql      |
+| Layer           | Technology         | Container  |
+|-----------------|--------------------|------------|
+| Frontend (User) | Vue.js 3           | frontend   |
+| Frontend (Admin)| Vue.js 3           | frontend   |
+| Backend API     | Python 3 / Flask   | python     |
+| Database        | MySQL              | mysql      |
+| Payments        | PayPal, Stripe     | external   |
+
+### 2.3 API Architecture (Headless)
+
+The backend is a pure REST API with no server-side rendering:
+
+```
++------------------+          +------------------+
+|  Static Frontend |   HTTP   |  Flask REST API  |
+|  (Vue.js SPA)    | <------> |  /api/v1/*       |
++------------------+          +------------------+
+                                     |
+                              +------+------+
+                              |             |
+                        +-----v-----+ +-----v-----+
+                        |  MySQL    | | External  |
+                        |  Database | | APIs      |
+                        +-----------+ +-----------+
+```
 
 ---
 
-## 3. Directory Structure
+## 3. Data Model
+
+### 3.1 Entity Overview
+
+| Entity            | Purpose                                         |
+|-------------------|-------------------------------------------------|
+| `user`            | Core user record (login, status, indexes)       |
+| `user_details`    | Private user data (name, address, phone)        |
+| `user_case`       | Case/project description for the subscription   |
+| `currency`        | Supported currencies with exchange rates        |
+| `tax`             | VAT and regional tax configurations             |
+| `tax_rate`        | Historical tax rates for auditing               |
+| `tarif_plan`      | Available subscription plans (base pricing)     |
+| `tarif_plan_price`| Multi-currency pricing overrides                |
+| `subscription`    | User's active/inactive subscriptions            |
+| `user_invoice`    | Payment records with tax breakdown              |
+
+### 3.2 Entity Relationship Diagram
+
+See: `puml/data-model.puml`
+
+```
++----------------+       +------------------+
+|     user       |       |   user_details   |
++----------------+       +------------------+
+| id (PK)        |<------| user_id (FK)     |
+| email          |       | first_name       |
+| password_hash  |       | last_name        |
+| status         |       | address_line_1   |
+| role           |       | address_line_2   |
+| created_at     |       | city             |
+| updated_at     |       | postal_code      |
++----------------+       | country          |
+       |                 | phone            |
+       |                 +------------------+
+       |
+       |         +------------------+
+       |         |    user_case     |
+       |         +------------------+
+       +-------->| id (PK)          |
+       |         | user_id (FK)     |
+       |         | description      |
+       |         | date_started     |
+       |         | status           |
+       |         | created_at       |
+       |         +------------------+
+       |
+       |         +------------------+
+       |         |   subscription   |
+       |         +------------------+
+       +-------->| id (PK)          |
+       |         | user_id (FK)     |
+       |         | tarif_plan_id(FK)|-------+
+       |         | status           |       |
+       |         | started_at       |       |
+       |         | expires_at       |       |
+       |         | created_at       |       |
+       |         +------------------+       |
+       |                                    |
+       |         +------------------+       |   +------------------+
+       |         |   user_invoice   |       |   |   tarif_plan     |
+       |         +------------------+       |   +------------------+
+       +-------->| id (PK)          |       +-->| id (PK)          |
+                 | user_id (FK)     |           | name             |
+                 | tarif_plan_id(FK)|---------->| description      |
+                 | subscription_id  |           | price            |
+                 | amount           |           | currency         |
+                 | currency         |           | billing_period   |
+                 | status           |           | features (JSON)  |
+                 | payment_method   |           | is_active        |
+                 | payment_ref      |           | created_at       |
+                 | invoiced_at      |           +------------------+
+                 | paid_at          |
+                 | created_at       |
+                 +------------------+
+```
+
+### 3.3 Entity Details
+
+#### 3.3.1 User (`user`)
+
+| Field          | Type         | Description                              |
+|----------------|--------------|------------------------------------------|
+| `id`           | BIGINT PK    | Auto-increment primary key               |
+| `email`        | VARCHAR(255) | Unique, indexed, login identifier        |
+| `password_hash`| VARCHAR(255) | Bcrypt hashed password                   |
+| `status`       | ENUM         | `pending`, `active`, `suspended`, `deleted` |
+| `role`         | ENUM         | `user`, `admin`                          |
+| `created_at`   | DATETIME     | Account creation timestamp               |
+| `updated_at`   | DATETIME     | Last modification timestamp              |
+
+**Indexes:**
+- `idx_user_email` (UNIQUE) on `email`
+- `idx_user_status` on `status`
+- `idx_user_created_at` on `created_at`
+
+#### 3.3.2 User Details (`user_details`)
+
+| Field           | Type         | Description                             |
+|-----------------|--------------|-----------------------------------------|
+| `id`            | BIGINT PK    | Auto-increment primary key              |
+| `user_id`       | BIGINT FK    | Reference to `user.id`                  |
+| `first_name`    | VARCHAR(100) | User's first name                       |
+| `last_name`     | VARCHAR(100) | User's last name                        |
+| `address_line_1`| VARCHAR(255) | Primary address line                    |
+| `address_line_2`| VARCHAR(255) | Secondary address line (optional)       |
+| `city`          | VARCHAR(100) | City                                    |
+| `postal_code`   | VARCHAR(20)  | Postal/ZIP code                         |
+| `country`       | VARCHAR(2)   | ISO 3166-1 alpha-2 country code         |
+| `phone`         | VARCHAR(20)  | Phone number with country code          |
+| `created_at`    | DATETIME     | Record creation timestamp               |
+| `updated_at`    | DATETIME     | Last modification timestamp             |
+
+**Indexes:**
+- `idx_user_details_user_id` (UNIQUE) on `user_id`
+
+#### 3.3.3 User Case (`user_case`)
+
+| Field          | Type         | Description                              |
+|----------------|--------------|------------------------------------------|
+| `id`           | BIGINT PK    | Auto-increment primary key               |
+| `user_id`      | BIGINT FK    | Reference to `user.id`                   |
+| `description`  | TEXT         | Case/project description                 |
+| `date_started` | DATE         | When the case/project started            |
+| `status`       | ENUM         | `draft`, `active`, `completed`, `archived` |
+| `created_at`   | DATETIME     | Record creation timestamp                |
+| `updated_at`   | DATETIME     | Last modification timestamp              |
+
+**Indexes:**
+- `idx_user_case_user_id` on `user_id`
+- `idx_user_case_status` on `status`
+
+#### 3.3.4 Tariff Plan (`tarif_plan`)
+
+| Field           | Type          | Description                            |
+|-----------------|---------------|----------------------------------------|
+| `id`            | BIGINT PK     | Auto-increment primary key             |
+| `name`          | VARCHAR(100)  | Plan display name                      |
+| `slug`          | VARCHAR(100)  | URL-friendly identifier                |
+| `description`   | TEXT          | Plan description                       |
+| `price`         | DECIMAL(10,2) | Plan price                             |
+| `currency`      | VARCHAR(3)    | ISO 4217 currency code (EUR, USD)      |
+| `billing_period`| ENUM          | `monthly`, `quarterly`, `yearly`, `one_time` |
+| `features`      | JSON          | Feature list as JSON array             |
+| `is_active`     | BOOLEAN       | Whether plan is available for purchase |
+| `sort_order`    | INT           | Display order                          |
+| `created_at`    | DATETIME      | Record creation timestamp              |
+| `updated_at`    | DATETIME      | Last modification timestamp            |
+
+**Indexes:**
+- `idx_tarif_plan_slug` (UNIQUE) on `slug`
+- `idx_tarif_plan_is_active` on `is_active`
+
+#### 3.3.5 Subscription (`subscription`)
+
+| Field          | Type         | Description                              |
+|----------------|--------------|------------------------------------------|
+| `id`           | BIGINT PK    | Auto-increment primary key               |
+| `user_id`      | BIGINT FK    | Reference to `user.id`                   |
+| `tarif_plan_id`| BIGINT FK    | Reference to `tarif_plan.id`             |
+| `status`       | ENUM         | `active`, `inactive`, `cancelled`, `expired` |
+| `started_at`   | DATETIME     | Subscription start date                  |
+| `expires_at`   | DATETIME     | Subscription expiration date             |
+| `cancelled_at` | DATETIME     | When subscription was cancelled (null)   |
+| `created_at`   | DATETIME     | Record creation timestamp                |
+| `updated_at`   | DATETIME     | Last modification timestamp              |
+
+**Indexes:**
+- `idx_subscription_user_id` on `user_id`
+- `idx_subscription_status` on `status`
+- `idx_subscription_expires_at` on `expires_at`
+
+#### 3.3.6 User Invoice (`user_invoice`)
+
+| Field            | Type          | Description                           |
+|------------------|---------------|---------------------------------------|
+| `id`             | BIGINT PK     | Auto-increment primary key            |
+| `user_id`        | BIGINT FK     | Reference to `user.id`                |
+| `tarif_plan_id`  | BIGINT FK     | Reference to `tarif_plan.id`          |
+| `subscription_id`| BIGINT FK     | Reference to `subscription.id`        |
+| `invoice_number` | VARCHAR(50)   | Unique invoice identifier             |
+| `amount`         | DECIMAL(10,2) | Invoice amount                        |
+| `currency`       | VARCHAR(3)    | ISO 4217 currency code                |
+| `status`         | ENUM          | `invoiced`, `paid`, `expired`, `cancelled` |
+| `payment_method` | ENUM          | `paypal`, `stripe`, `manual`          |
+| `payment_ref`    | VARCHAR(255)  | External payment reference ID         |
+| `invoiced_at`    | DATETIME      | When invoice was created              |
+| `paid_at`        | DATETIME      | When payment was received             |
+| `expires_at`     | DATETIME      | Payment deadline                      |
+| `created_at`     | DATETIME      | Record creation timestamp             |
+| `updated_at`     | DATETIME      | Last modification timestamp           |
+
+**Indexes:**
+- `idx_user_invoice_user_id` on `user_id`
+- `idx_user_invoice_status` on `status`
+- `idx_user_invoice_invoice_number` (UNIQUE) on `invoice_number`
+
+---
+
+## 4. User Flow
+
+### 4.1 End-User Purchase Journey
+
+See: `puml/user-flow.puml`
+
+```
++-------------------------------------------------------------------+
+|                    End-User Purchase Journey                       |
++-------------------------------------------------------------------+
+|                                                                    |
+|  1. LANDING PAGE                                                   |
+|     +-- User arrives at static landing page                        |
+|     +-- Marketing content, value proposition                       |
+|                    |                                               |
+|                    v                                               |
+|  2. TARIFF SELECTION                                               |
+|     +-- User views available tariff plans                          |
+|     +-- Compares features and pricing                              |
+|     +-- Clicks "Subscribe" on chosen plan                          |
+|                    |                                               |
+|                    v                                               |
+|  3. REGISTRATION/LOGIN                                             |
+|     +-- New user: Creates account (email, password)                |
+|     +-- Existing user: Logs in                                     |
+|                    |                                               |
+|                    v                                               |
+|  4. CHECKOUT                                                       |
+|     +-- Reviews order summary                                      |
+|     +-- Enters billing details (user_details)                      |
+|     +-- Selects payment method (PayPal/Stripe)                     |
+|                    |                                               |
+|                    v                                               |
+|  5. PAYMENT                                                        |
+|     +-- Redirects to PayPal/Stripe                                 |
+|     +-- Completes payment                                          |
+|     +-- Returns to confirmation page                               |
+|                    |                                               |
+|                    v                                               |
+|  6. CONFIRMATION                                                   |
+|     +-- Subscription activated                                     |
+|     +-- Invoice generated                                          |
+|     +-- Confirmation email sent                                    |
+|     +-- Access to subscribed services                              |
+|                                                                    |
++-------------------------------------------------------------------+
+```
+
+### 4.2 Admin Operations
+
+See: `puml/admin-flow.puml`
+
+- View/manage users and subscriptions
+- Create/edit tariff plans
+- View invoices and payment status
+- Basic reporting and statistics
+
+---
+
+## 5. Subscription Lifecycle
+
+See: `puml/subscription-lifecycle.puml`
+
+### 5.1 Subscription States
+
+| State       | Description                                      |
+|-------------|--------------------------------------------------|
+| `active`    | Subscription is valid and services accessible    |
+| `inactive`  | Subscription not yet started or paused           |
+| `cancelled` | User cancelled, may remain active until expiry   |
+| `expired`   | Subscription period ended, services inaccessible |
+
+### 5.2 State Transitions
+
+```
+                    +-- Payment Received
+                    |
+                    v
++----------+    +---------+    +------------+
+| inactive | -> | active  | -> | cancelled  |
++----------+    +---------+    +------------+
+                    |                |
+                    |                | (grace period ends)
+                    v                v
+               +---------+    +---------+
+               | expired |    | expired |
+               +---------+    +---------+
+```
+
+### 5.3 Invoice States
+
+| State       | Description                                      |
+|-------------|--------------------------------------------------|
+| `invoiced`  | Invoice created, awaiting payment                |
+| `paid`      | Payment received and confirmed                   |
+| `expired`   | Payment deadline passed, invoice void            |
+| `cancelled` | Invoice cancelled by admin or system             |
+
+---
+
+## 6. Payment Integration
+
+### 6.1 Architecture Overview
+
+The payment system uses a **provider-agnostic plugin architecture** with **event-driven processing**:
+
+- **Plugin System**: General-purpose plugin framework for extensibility
+- **Payment Plugins**: Provider-specific implementations (Stripe, PayPal, Manual)
+- **Payment Methods**: Strategy pattern for different payment types (Card, Invoice, Wallet)
+- **Event Bus**: Decoupled event handling for payment workflows
+
+See detailed documentation:
+- [Payment Architecture](./payment-architecture.md) - Provider-agnostic payment platform
+- [Plugin System](./plugin-system.md) - General-purpose plugin framework
+
+### 6.2 Supported Providers & Methods
+
+| Provider | Payment Methods | Integration Type |
+|----------|-----------------|------------------|
+| Stripe   | Card, SEPA      | SDK, Webhooks    |
+| PayPal   | Card, Wallet    | REST API, Webhooks |
+| Manual   | Invoice, Bank Transfer | Internal |
+
+| Payment Method | Description | Redirect Required |
+|----------------|-------------|-------------------|
+| Card           | Credit/debit card | Yes (hosted checkout) |
+| Invoice        | Pay later by invoice | No |
+| Wallet         | Digital wallet (PayPal) | Yes |
+| Bank Transfer  | Direct bank transfer | No |
+
+### 6.3 Event-Driven Payment Flow
+
+See: `puml/payment-flow.puml`, `puml/payment-architecture.puml`
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Event-Driven Payment Flow                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. User → CheckoutOrchestrator.create_checkout()               │
+│           │                                                      │
+│           ├─→ Create Subscription (inactive)                    │
+│           ├─→ Create Invoice                                    │
+│           ├─→ Publish InvoiceCreatedEvent                       │
+│           └─→ Provider.create_checkout_session()                │
+│                                                                  │
+│  2. User completes payment on provider site                     │
+│                                                                  │
+│  3. Provider → Webhook Route                                    │
+│           │                                                      │
+│           └─→ PaymentWebhookHandler.handle_webhook()            │
+│                    │                                            │
+│                    ├─→ Verify signature                         │
+│                    ├─→ Parse to normalized event                │
+│                    └─→ Publish PaymentCompletedEvent            │
+│                                                                  │
+│  4. EventBus dispatches to handlers:                            │
+│           │                                                      │
+│           ├─→ PaymentCompletedHandler                           │
+│           │        ├─→ InvoiceService.mark_paid()               │
+│           │        └─→ SubscriptionService.activate()           │
+│           │                                                      │
+│           └─→ EmailHandler                                      │
+│                    └─→ Send confirmation email                  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 6.4 Plugin Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Plugin System Layers                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Service Layer (Provider-Agnostic)                       │   │
+│  │  CheckoutOrchestrator, PaymentWebhookHandler             │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                           │                                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Payment Method Abstraction                              │   │
+│  │  CardPayment, InvoicePayment, WalletPayment              │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                           │                                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Provider Adapter Layer                                  │   │
+│  │  IPaymentProviderAdapter, PaymentProviderRegistry        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                           │                                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Plugin System                                           │   │
+│  │  StripePlugin, PayPalPlugin, ManualPaymentPlugin         │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 6.5 Webhook Handling
+
+Webhooks are processed through the event-driven architecture:
+
+1. Provider sends webhook to `/api/v1/webhooks/{provider}`
+2. `PaymentWebhookHandler` verifies signature using provider adapter
+3. Webhook payload parsed to normalized `WebhookEvent`
+4. Converted to domain event (`PaymentCompletedEvent`, etc.)
+5. Published to `EventBus`
+6. Event handlers process business logic asynchronously
+
+Supported webhook events:
+- `payment.completed` - Payment successful
+- `payment.failed` - Payment failed
+- `payment.expired` - Session expired
+- `refund.completed` - Refund processed
+
+---
+
+## 7. API Endpoints
+
+### 7.1 Public Endpoints (No Auth)
+
+| Method | Endpoint                    | Description                    |
+|--------|----------------------------|--------------------------------|
+| GET    | `/api/v1/tarif-plans`       | List active tariff plans       |
+| GET    | `/api/v1/tarif-plans/{slug}`| Get single tariff plan         |
+| POST   | `/api/v1/auth/register`     | User registration              |
+| POST   | `/api/v1/auth/login`        | User login                     |
+
+### 7.2 User Endpoints (Auth Required)
+
+| Method | Endpoint                        | Description                  |
+|--------|--------------------------------|------------------------------|
+| GET    | `/api/v1/user/profile`          | Get user profile             |
+| PUT    | `/api/v1/user/profile`          | Update user profile          |
+| GET    | `/api/v1/user/details`          | Get user details             |
+| PUT    | `/api/v1/user/details`          | Update user details          |
+| GET    | `/api/v1/user/subscriptions`    | List user subscriptions      |
+| GET    | `/api/v1/user/invoices`         | List user invoices           |
+| POST   | `/api/v1/checkout/create`       | Create checkout session      |
+| POST   | `/api/v1/checkout/confirm`      | Confirm payment              |
+
+### 7.3 Admin Endpoints (Admin Auth Required)
+
+| Method | Endpoint                        | Description                  |
+|--------|--------------------------------|------------------------------|
+| GET    | `/api/v1/admin/users`           | List all users               |
+| GET    | `/api/v1/admin/users/{id}`      | Get user details             |
+| PUT    | `/api/v1/admin/users/{id}`      | Update user                  |
+| GET    | `/api/v1/admin/subscriptions`   | List all subscriptions       |
+| PUT    | `/api/v1/admin/subscriptions/{id}` | Update subscription       |
+| GET    | `/api/v1/admin/invoices`        | List all invoices            |
+| PUT    | `/api/v1/admin/invoices/{id}`   | Update invoice               |
+| GET    | `/api/v1/admin/tarif-plans`     | List all tariff plans        |
+| POST   | `/api/v1/admin/tarif-plans`     | Create tariff plan           |
+| PUT    | `/api/v1/admin/tarif-plans/{id}`| Update tariff plan           |
+
+### 7.4 Webhook Endpoints
+
+| Method | Endpoint                        | Description                  |
+|--------|--------------------------------|------------------------------|
+| POST   | `/api/v1/webhooks/paypal`       | PayPal webhook handler       |
+| POST   | `/api/v1/webhooks/stripe`       | Stripe webhook handler       |
+
+---
+
+## 8. Directory Structure
 
 ```
 vbwd-sdk/
-├── container/                 # Docker configuration per container
-│   ├── frontend/
-│   ├── python/
-│   └── mysql/
-├── data/                      # Persistent data & logs
-│   ├── python/
-│   │   └── logs/
-│   ├── frontend/
-│   │   └── logs/
-│   └── mysql/                 # MySQL binary data
-├── python/                    # Python backend root
-│   └── api/
-│       ├── requirements.txt
-│       ├── src/
-│       │   ├── routes/        # API route handlers
-│       │   ├── models/        # Data models
-│       │   └── services/      # Business logic
-│       └── tests/
-│           ├── unit/          # Unit tests
-│           ├── integration/   # Integration tests
-│           └── fixtures/      # Test fixtures
-├── frontend/                  # Vue.js applications
-│   ├── admin/
-│   │   └── vue/
-│   │       └── package.json
-│   └── user/
-│       └── vue/
-│           └── package.json
-├── docs/
-│   ├── architecture/          # This documentation
-│   └── devlog/                # Development logs (by date)
-├── docker-compose.yml
-├── CLAUDE.md
-├── README.md
-└── LICENSE
++-- container/                 # Docker configuration per container
+|   +-- frontend/
+|   +-- python/
+|   +-- mysql/
++-- data/                      # Persistent data & logs
+|   +-- python/
+|   |   +-- logs/
+|   +-- frontend/
+|   |   +-- logs/
+|   +-- mysql/                 # MySQL binary data
++-- python/                    # Python backend root
+|   +-- api/
+|       +-- requirements.txt
+|       +-- src/
+|       |   +-- routes/        # API route handlers
+|       |   |   +-- auth.py
+|       |   |   +-- user.py
+|       |   |   +-- checkout.py
+|       |   |   +-- admin.py
+|       |   |   +-- webhooks.py
+|       |   +-- models/        # Data models
+|       |   |   +-- user.py
+|       |   |   +-- user_details.py
+|       |   |   +-- user_case.py
+|       |   |   +-- tarif_plan.py
+|       |   |   +-- subscription.py
+|       |   |   +-- user_invoice.py
+|       |   +-- services/      # Business logic
+|       |       +-- auth_service.py
+|       |       +-- subscription_service.py
+|       |       +-- payment_service.py
+|       |       +-- invoice_service.py
+|       +-- tests/
+|           +-- unit/          # Unit tests
+|           +-- integration/   # Integration tests
+|           +-- fixtures/      # Test fixtures
++-- frontend/                  # Vue.js applications
+|   +-- admin/
+|   |   +-- vue/
+|   |       +-- package.json
+|   +-- user/
+|       +-- vue/
+|           +-- package.json
++-- docs/
+|   +-- architecture/          # This documentation
+|   |   +-- README.md
+|   |   +-- puml/              # PlantUML diagrams
+|   +-- devlog/                # Development logs (by date)
++-- docker-compose.yml
++-- CLAUDE.md
++-- README.md
++-- LICENSE
 ```
 
 ---
 
-## 4. Application Workflow
+## 9. Development Principles
 
-### 4.1 User Journey (Frontend - User App)
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Multi-Step Submission Form                    │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  PAGE 1: Data Upload                                            │
-│  ├── User uploads images                                        │
-│  ├── User adds text comments                                    │
-│  └── User clicks "Next"                                         │
-│              │                                                  │
-│              ▼                                                  │
-│  PAGE 2: Consent & Contact                                      │
-│  ├── User sees information text                                 │
-│  ├── User enters email address                                  │
-│  ├── User reviews data processing agreement                     │
-│  └── User clicks "Next"                                         │
-│              │                                                  │
-│              ▼                                                  │
-│  PAGE 3: Confirmation                                           │
-│  └── User sees: "Your data is submitted,                        │
-│       you will receive a reply shortly"                         │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 4.2 Backend Processing Flow
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Backend Processing Pipeline                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. RECEIVE DATA                                                │
-│     └── Flask API receives submission                           │
-│                    │                                            │
-│                    ▼                                            │
-│  2. VALIDATION                                                  │
-│     ├── Check for injection/malware                             │
-│     ├── Verify image formats                                    │
-│     └── Validate data integrity                                 │
-│                    │                                            │
-│                    ▼                                            │
-│  3. PROCESS & FORWARD                                           │
-│     ├── Create data object (images + metadata)                  │
-│     └── Send to custom diagnostic API endpoint                  │
-│                    │                                            │
-│                    ▼                                            │
-│  4. POLL FOR RESULTS                                            │
-│     └── Ping API endpoint every 60 seconds                      │
-│         to check if result is ready                             │
-│                    │                                            │
-│                    ▼                                            │
-│  5. DELIVER RESULTS                                             │
-│     ├── Generate email from HTML template                       │
-│     └── Send result email to user                               │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 5. Python Backend Architecture
-
-### 5.1 Concurrency Model (Apache/PHP-like)
-
-The backend follows an **isolated request model** similar to Apache/PHP:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Request Isolation Model                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
-│  │ User A  │  │ User B  │  │ Admin X │  │ Admin Y │            │
-│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘            │
-│       │            │            │            │                  │
-│       ▼            ▼            ▼            ▼                  │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │              WSGI Server (Gunicorn/uWSGI)                │   │
-│  │                   Multiple Workers                       │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│       │            │            │            │                  │
-│       ▼            ▼            ▼            ▼                  │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
-│  │Worker 1 │  │Worker 2 │  │Worker 3 │  │Worker N │            │
-│  │         │  │         │  │         │  │         │            │
-│  │ Own     │  │ Own     │  │ Own     │  │ Own     │            │
-│  │ Context │  │ Context │  │ Context │  │ Context │            │
-│  │ Own     │  │ Own     │  │ Own     │  │ Own     │            │
-│  │ Session │  │ Session │  │ Session │  │ Session │            │
-│  └─────────┘  └─────────┘  └─────────┘  └─────────┘            │
-│       │            │            │            │                  │
-│       └────────────┴────────────┴────────────┘                  │
-│                          │                                      │
-│                          ▼                                      │
-│              ┌─────────────────────┐                            │
-│              │   MySQL (Shared)    │                            │
-│              │   Connection Pool   │                            │
-│              └─────────────────────┘                            │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 5.2 Key Isolation Principles
-
-| Principle | Implementation |
-|-----------|----------------|
-| **Request Isolation** | Each request runs in its own context, no shared state between requests |
-| **Session Independence** | User sessions stored in DB/Redis, not in worker memory |
-| **No Global State** | No mutable global variables; all state passed explicitly or via DI |
-| **Stateless Workers** | Workers can be killed/restarted without affecting other users |
-| **Connection Pooling** | DB connections managed via pool, not per-request connections |
-
-### 5.3 Multi-User Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    User Type Separation                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  FRONTEND USERS (Public)          BACKEND USERS (Admin)         │
-│  ──────────────────────           ─────────────────────         │
-│  │                                │                             │
-│  │  - Submit diagnostic requests  │  - Review submissions       │
-│  │  - View own submission status  │  - Manage configurations    │
-│  │  - Receive results via email   │  - Monitor system status    │
-│  │                                │  - Access all submissions   │
-│  │                                │                             │
-│  └────────────┬───────────────────┴────────────┬────────────────┘
-│               │                                │                │
-│               ▼                                ▼                │
-│  ┌────────────────────────┐    ┌────────────────────────┐      │
-│  │   /api/user/*          │    │   /api/admin/*         │      │
-│  │   Public endpoints     │    │   Protected endpoints  │      │
-│  │   Rate limited         │    │   Auth required        │      │
-│  └────────────────────────┘    └────────────────────────┘      │
-│               │                                │                │
-│               └────────────────┬───────────────┘                │
-│                                │                                │
-│                                ▼                                │
-│              ┌─────────────────────────────────┐                │
-│              │     Shared Services Layer       │                │
-│              │  (Injected per request scope)   │                │
-│              └─────────────────────────────────┘                │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 5.4 Async Submission Pattern (Fire-and-Forget)
-
-Our app calls external LoopAI API which may take significant time. Users should not wait.
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Fire-and-Forget Pattern                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  FRONTEND (Vue.js)                    BACKEND (Flask)           │
-│  ─────────────────                    ───────────────           │
-│       │                                    │                    │
-│  1. User submits form ──────────────────► │                    │
-│       │                                    │                    │
-│       │                               2. Validate data          │
-│       │                               3. Save to DB             │
-│       │                               4. Submit to ThreadPool   │
-│       │                                    │                    │
-│  5. ◄─────────────── 202 ACCEPTED ────────┤  (~50ms)           │
-│     "Your data is submitted"               │                    │
-│       │                                    │                    │
-│       │                          [Background Thread]            │
-│       │                               6. Call LoopAI API        │
-│       │                                  (may take minutes)     │
-│       │                               7. Poll for results       │
-│       │                               8. Send email when ready  │
-│       │                                    │                    │
-│  9. ◄══════════ WebSocket/SSE ════════════╡                    │
-│     (optional: if user still on page)      │                    │
-│     "Your results are ready!"              │                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Key Principle:** HTTP response returns immediately (202 ACCEPTED). Long-running work happens in background.
-
-### 5.5 Simple ThreadPool Implementation
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-from flask import current_app
-import uuid
-
-# Global executor (created once at app startup)
-executor = ThreadPoolExecutor(max_workers=10)
-
-@app.route('/api/submit', methods=['POST'])
-def submit_diagnostic():
-    # 1. Validate (sync, fast)
-    data = request.get_json()
-    errors = validate_submission(data)
-    if errors:
-        return jsonify({"success": False, "errors": errors}), 400
-
-    # 2. Save to DB (sync, fast)
-    submission = Submission(
-        email=data['email'],
-        status='pending',
-        created_at=datetime.utcnow()
-    )
-    db.session.add(submission)
-    db.session.commit()
-    submission_id = submission.id
-
-    # 3. Submit to background thread (non-blocking)
-    app = current_app._get_current_object()
-    executor.submit(process_submission_background, app, submission_id, data)
-
-    # 4. Return immediately
-    return jsonify({
-        "success": True,
-        "message": "Your data is submitted. You will receive results via email.",
-        "submission_id": submission_id
-    }), 202  # 202 = Accepted
-
-def process_submission_background(app, submission_id, data):
-    """Runs in separate thread - does NOT block HTTP requests"""
-    with app.app_context():
-        try:
-            # Call LoopAI API (may take minutes)
-            response = call_loopai_api(data)
-
-            # Poll for results
-            result = poll_for_results(response['execution_id'])
-
-            # Update DB
-            submission = Submission.query.get(submission_id)
-            submission.status = 'completed'
-            submission.result = result
-            db.session.commit()
-
-            # Send email
-            send_result_email(submission.email, result)
-
-            # Optional: notify frontend via WebSocket
-            socketio.emit('result_ready', {'submission_id': submission_id},
-                         room=f'user_{submission.email}')
-        except Exception as e:
-            submission = Submission.query.get(submission_id)
-            submission.status = 'failed'
-            submission.error = str(e)
-            db.session.commit()
-```
-
-### 5.6 Optional Real-Time Updates (WebSocket)
-
-If user stays on confirmation page, show live updates:
-
-```python
-# Backend: SocketIO setup
-from flask_socketio import SocketIO, join_room
-
-socketio = SocketIO(app, async_mode='threading')
-
-@socketio.on('subscribe')
-def handle_subscribe(data):
-    email = data['email']
-    join_room(f'user_{email}')
-
-# In background thread, emit updates:
-socketio.emit('status_update', {
-    'submission_id': submission_id,
-    'status': 'processing',
-    'message': 'Analyzing your images...'
-}, room=f'user_{email}')
-```
-
-```javascript
-// Frontend: Vue.js
-import { io } from 'socket.io-client';
-
-const socket = io();
-socket.emit('subscribe', { email: userEmail });
-
-socket.on('status_update', (data) => {
-  this.statusMessage = data.message;
-});
-
-socket.on('result_ready', (data) => {
-  this.showNotification('Your results are ready! Check your email.');
-});
-```
-
-### 5.7 High-Load Design
-
-- **Horizontal Scaling**: Multiple worker processes handle concurrent requests
-- **ThreadPoolExecutor**: Background tasks don't block HTTP handlers
-- **Connection Pooling**: DB connections managed via pool
-- **Graceful Degradation**: Failed background tasks don't affect other users
-
----
-
-## 6. Frontend Applications
-
-### 6.1 User App (`frontend/user/vue/`)
-
-- Public-facing multi-step form
-- Image upload interface
-- Consent management
-- Submission confirmation
-
-### 6.2 Admin App (`frontend/admin/vue/`)
-
-- Backoffice management
-- Submission review
-- System monitoring
-- Configuration management
-
----
-
-## 6. Development Principles
-
-### 6.1 Core Practices
+### 9.1 Core Practices
 
 - **TDD First**: Tests are written before implementation
 - **SOLID Principles**: Single responsibility, Open-closed, Liskov substitution, Interface segregation, Dependency inversion
-- **LSP**: Liskov Substitution Principle strictly enforced
 - **DI**: Dependency Injection for loose coupling and testability
 - **Clean Code**: Readable, maintainable, self-documenting code
 
-### 6.2 Testing Strategy
+### 9.2 Testing Strategy
 
 - All tests run in Docker containers
 - Tests must pass before any merge
 - Integration tests verify container communication
 - Unit tests cover business logic
-
-### 6.3 Docker-First Development
 
 ```bash
 # All test execution happens in containers
@@ -440,34 +633,43 @@ docker-compose run --rm frontend npm test
 
 ---
 
-## 7. Security Considerations
+## 10. Security Considerations
 
-- Input validation on all user submissions
-- Image format verification before processing
-- Malware/injection detection
-- Secure API communication
-- Data processing consent management
-
----
-
-## 8. Integration Points
-
-### 8.1 External API
-
-- Custom diagnostic API endpoint for image analysis
-- Polling mechanism for result retrieval (60-second intervals)
-- Async result processing
-
-### 8.2 Email Service
-
-- HTML template-based emails
-- Result delivery to users
-- Configurable SMTP settings
+- Password hashing with bcrypt
+- JWT-based authentication
+- Input validation on all endpoints
+- SQL injection prevention via ORM
+- HTTPS only in production
+- Webhook signature verification (PayPal/Stripe)
+- Rate limiting on public endpoints
+- Sensitive data separation (user vs user_details)
 
 ---
 
-## 9. Related Documentation
+## 11. PlantUML Diagrams
 
+All architecture diagrams are available in PlantUML format:
+
+| Diagram                | File                              | Description                       |
+|------------------------|-----------------------------------|-----------------------------------|
+| Data Model (ERD)       | `puml/data-model.puml`            | Entity relationship diagram       |
+| System Architecture    | `puml/system-architecture.puml`   | Container and service overview    |
+| User Flow              | `puml/user-flow.puml`             | End-user purchase journey         |
+| Subscription Lifecycle | `puml/subscription-lifecycle.puml`| Subscription state machine        |
+| Invoice Lifecycle      | `puml/invoice-lifecycle.puml`     | Invoice state machine             |
+| Payment Flow           | `puml/payment-flow.puml`          | Payment processing sequence       |
+| Payment Architecture   | `puml/payment-architecture.puml`  | Provider-agnostic payment layers  |
+
+---
+
+## 12. Related Documentation
+
+### Architecture Documents
+- [Payment Architecture](./payment-architecture.md) - Provider-agnostic payment platform
+- [Plugin System](./plugin-system.md) - General-purpose plugin framework
+- [Sprint Plans](./sprints/README.md) - Implementation sprints with TDD
+
+### Other Documentation
 - `docs/devlog/` - Daily development logs
 - `CLAUDE.md` - Claude Code guidance
 - `README.md` - Project overview
