@@ -1,7 +1,6 @@
 # Recommended AI Model Pipeline for Multi-Step Medical Image Evaluation in Your SaaS
 
-Building a SaaS for multi-step medical image evaluation is a smart move—it's a high-impact area with growing demand for efficient, accurate diagnostics. Based on your description, I'll outline a modular pipeline tailored to your needs:
-
+###Plans###
 1. **Filtering Step**: Use a specialized vision model to classify and filter images as "pneumonia X-rays" (e.g., binary classification: pneumonia vs. normal/other). This acts as a gatekeeper to reduce noise before deeper analysis.
 2. **Analysis Step**: Pass filtered images to a multimodal LLM (vision-language model) for detailed interpretation, generating a structured answer (e.g., severity, location, recommendations).
 3. **Integration Step**: Append the LLM's output as text to the medical case file (e.g., via simple string concatenation or JSON structuring—no heavy AI needed here, just your backend logic).
