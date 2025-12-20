@@ -1,0 +1,96 @@
+@startuml booking-lifecycle
+!theme plain
+title Booking State Machine
+
+skinparam state {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+[*] --> pending : User creates booking
+
+state pending {
+    pending : Booking created
+    pending : Awaiting payment
+    pending : Timeslot temporarily reserved
+}
+
+pending --> confirmed : Payment successful\n(webhook received)
+pending --> cancelled : Payment failed\nor timeout
+pending --> [*] : Booking deleted\n(cleanup job)
+
+state confirmed {
+    confirmed : Payment received
+    confirmed : Timeslot permanently booked
+    confirmed : User notified
+}
+
+confirmed --> completed : Appointment time passed\n+ user attended
+confirmed --> no_show : Appointment time passed\n+ user did not attend
+confirmed --> cancelled : User cancels\n(with refund policy)
+confirmed --> confirmed : Rescheduled to\nnew timeslot
+
+state cancelled {
+    cancelled : Booking cancelled
+    cancelled : Timeslot released
+    cancelled : Refund processed (if eligible)
+}
+
+cancelled --> [*] : Archived
+
+state completed {
+    completed : Appointment completed
+    completed : Service delivered
+    completed : Can leave review
+}
+
+completed --> [*] : Archived
+
+state no_show {
+    no_show : User did not attend
+    no_show : No refund
+    no_show : May affect future bookings
+}
+
+no_show --> [*] : Archived
+
+note right of pending
+    **Pending booking:**
+    - Temporary timeslot hold (15 min)
+    - Payment required to confirm
+    - Released if payment not received
+end note
+
+note right of confirmed
+    **Confirmed booking:**
+    - User has paid
+    - Appointment is scheduled
+    - Cancellation policy applies:
+      * 24+ hrs: 100% refund
+      * 6-24 hrs: 50% refund
+      * <6 hrs: No refund
+end note
+
+note left of cancelled
+    **Cancelled booking:**
+    - User-initiated or payment failure
+    - Timeslot becomes available again
+    - Refund based on cancellation timing
+end note
+
+note right of no_show
+    **No-show:**
+    - User did not appear
+    - No refund processed
+    - May trigger automated flags
+end note
+
+note bottom of completed
+    **Completed booking:**
+    - Service successfully delivered
+    - User may be asked for feedback
+    - Historical record retained
+end note
+
+@enduml

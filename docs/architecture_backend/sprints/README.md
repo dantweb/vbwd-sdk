@@ -96,6 +96,10 @@ class IPaymentGateway(ABC):
 | 3 | Subscriptions | Tariff plans, subscription lifecycle |
 | 4 | Payments | Invoice, PayPal/Stripe integration |
 | 5 | Admin & Webhooks | Admin API, webhook handlers |
+| 6 | Booking Models | Room, Timeslot, Booking models & services |
+| 7 | Booking API | User and admin booking endpoints |
+| 8 | Ticket Models | Event, Ticket, TicketScan models & services |
+| 9 | Ticket API | Event browsing, ticket management, scanner |
 
 ---
 
@@ -230,12 +234,29 @@ python/api/
 
 ## Sprint Documents
 
+### Core Platform
 - [Sprint 0: Foundation](./sprint-0-foundation.md)
 - [Sprint 1: Data Layer](./sprint-1-data-layer.md)
 - [Sprint 2: Auth & Users](./sprint-2-auth-users.md)
 - [Sprint 3: Subscriptions](./sprint-3-subscriptions.md)
 - [Sprint 4: Payments](./sprint-4-payments.md)
 - [Sprint 5: Admin & Webhooks](./sprint-5-admin-webhooks.md)
+
+### Booking System
+- [Sprint 6: Booking Models & Services](./sprint-6-booking-models.md)
+- [Sprint 7: Booking API Routes](./sprint-7-booking-api.md)
+
+### Ticket System
+- [Sprint 8: Ticket Models & Services](./sprint-8-ticket-models.md)
+- [Sprint 9: Ticket API Routes](./sprint-9-ticket-api.md)
+
+### Related PlantUML Diagrams
+- [Booking Data Model](../puml/booking-data-model.puml)
+- [Booking Flow](../puml/booking-flow.puml)
+- [Booking Lifecycle](../puml/booking-lifecycle.puml)
+- [Ticket Data Model](../puml/ticket-data-model.puml)
+- [Ticket Flow](../puml/ticket-flow.puml)
+- [Ticket Lifecycle](../puml/ticket-lifecycle.puml)
 
 ---
 

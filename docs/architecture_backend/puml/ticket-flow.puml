@@ -1,0 +1,271 @@
+@startuml ticket-flow
+!theme plain
+title Ticket Purchase & Validation Flow
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam roundcorner 10
+
+actor "User" as user
+participant "Frontend\n(Vue.js)" as frontend
+participant "Backend API\n(Flask)" as backend
+database "MySQL" as db
+participant "Payment Provider\n(PayPal/Stripe)" as provider
+participant "Email\nService" as email
+participant "QR\nGenerator" as qr
+actor "Scanner\nOperator" as scanner
+
+== Event Discovery ==
+
+user -> frontend : Browse events
+activate frontend
+
+frontend -> backend : GET /api/v1/events\n?type=conference&page=1
+activate backend
+backend -> db : Query published events
+db --> backend : events[]
+backend --> frontend : {events: [...]}
+deactivate backend
+
+frontend -> user : Display event list
+
+user -> frontend : Select event
+
+frontend -> backend : GET /api/v1/events/{id}
+activate backend
+backend -> db : Get event details
+db --> backend : event
+backend --> frontend : {event, available_tickets}
+deactivate backend
+
+frontend -> user : Show event details\n+ ticket options
+deactivate frontend
+
+== Ticket Purchase ==
+
+user -> frontend : Select quantity & type,\nclick "Purchase"
+activate frontend
+
+frontend -> backend : POST /api/v1/tickets/purchase\n{eventId, ticketType, quantity}
+activate backend
+
+backend -> db : Check event status\n(status=published)
+db --> backend : event
+
+backend -> db : Check availability\n(max_participants - current)
+db --> backend : available_count
+
+alt Not Enough Tickets
+    backend --> frontend : 400 {error: "Only N tickets available"}
+else Tickets Available
+    backend -> db : Create pending tickets\n(status: active)
+    db --> backend : tickets[]
+
+    backend -> db : Increment participant count
+
+    backend -> provider : Create checkout session\n{total_amount, ticket_ids}
+    activate provider
+    provider --> backend : {session_id, checkout_url}
+    deactivate provider
+
+    backend --> frontend : {tickets, checkout_url, total}
+end
+deactivate backend
+
+frontend -> user : Redirect to payment
+deactivate frontend
+
+== Payment Processing ==
+
+user -> provider : Complete payment
+activate provider
+
+alt Payment Successful
+    provider --> user : Redirect to success_url
+
+    provider -> backend : POST /api/v1/webhooks/{provider}\n{event: payment.completed}
+    activate backend
+
+    backend -> backend : Verify webhook signature
+
+    backend -> db : Update tickets\n(payment_id, confirmed)
+
+    loop For each ticket
+        backend -> qr : Generate QR code\n(ticket_code)
+        activate qr
+        qr --> backend : qr_image_base64
+        deactivate qr
+    end
+
+    backend -> email : Send tickets email\n+ PDF with QR codes
+    activate email
+    email --> backend : OK
+    deactivate email
+
+    backend --> provider : 200 OK
+    deactivate backend
+
+else Payment Failed
+    provider --> user : Redirect to cancel_url
+
+    provider -> backend : POST /api/v1/webhooks/{provider}\n{event: payment.failed}
+    activate backend
+
+    backend -> db : Delete pending tickets
+
+    backend -> db : Decrement participant count
+
+    backend --> provider : 200 OK
+    deactivate backend
+end
+
+deactivate provider
+
+== Ticket Validation (Event Day) ==
+
+scanner -> frontend : Open scanner interface
+activate frontend
+
+user -> scanner : Present QR code
+
+scanner -> frontend : Scan QR code
+
+frontend -> backend : POST /api/v1/tickets/{code}/validate
+activate backend
+
+backend -> db : Get ticket by code
+db --> backend : ticket
+
+alt Ticket Not Found
+    backend --> frontend : {valid: false, reason: "Ticket not found"}
+else Ticket Found
+    backend -> backend : Check validity:\n- status = active\n- valid_from <= now <= valid_until
+
+    alt Ticket Valid
+        backend --> frontend : {valid: true, ticket, event}
+    else Ticket Invalid
+        backend --> frontend : {valid: false, reason: "..."}
+    end
+end
+deactivate backend
+
+frontend -> scanner : Display validation result
+deactivate frontend
+
+== Ticket Check-in ==
+
+scanner -> frontend : Confirm check-in
+activate frontend
+
+frontend -> backend : POST /api/v1/admin/tickets/{code}/scan\n{scanType: "check_in", location: "Main Gate"}
+activate backend
+
+backend -> db : Validate ticket again
+db --> backend : ticket (valid)
+
+backend -> db : Create ticket_scan record
+
+backend -> db : Update ticket\n(check_in_time = now)
+
+backend -> db : Optionally mark as used\n(for single-entry events)
+
+backend --> frontend : {success: true, scan_record}
+deactivate backend
+
+frontend -> scanner : Show check-in success\n"Welcome, {user_name}!"
+deactivate frontend
+
+== Ticket Transfer ==
+
+user -> frontend : View my tickets,\nclick "Transfer"
+activate frontend
+
+frontend -> backend : POST /api/v1/tickets/{id}/transfer\n{to_email: "friend@email.com"}
+activate backend
+
+backend -> db : Find recipient user\nor create invitation
+db --> backend : to_user
+
+backend -> db : Update ticket owner\n(user_id = to_user.id)
+
+backend -> db : Create transfer record\n(from_user, to_user)
+
+backend -> email : Notify sender
+activate email
+email --> backend : OK
+deactivate email
+
+backend -> email : Send ticket to recipient
+activate email
+email --> backend : OK
+deactivate email
+
+backend --> frontend : {transfer_success: true}
+deactivate backend
+
+frontend -> user : Show transfer confirmation
+deactivate frontend
+
+== Ticket Cancellation & Refund ==
+
+user -> frontend : Request cancellation
+activate frontend
+
+frontend -> backend : PUT /api/v1/tickets/{id}/cancel
+activate backend
+
+backend -> db : Get ticket with event
+db --> backend : ticket + event
+
+backend -> backend : Calculate refund\n(based on days_before)
+
+note right of backend
+    **Refund Policy:**
+    - 7+ days: 100% refund
+    - 3-7 days: 50% refund
+    - <3 days: No refund
+end note
+
+backend -> db : Update ticket\n(status: cancelled/refunded)
+
+backend -> db : Decrement event\nparticipant count
+
+alt Refund Required
+    backend -> provider : Process refund
+    activate provider
+    provider --> backend : refund_confirmed
+    deactivate provider
+end
+
+backend -> email : Send cancellation notice
+activate email
+email --> backend : OK
+deactivate email
+
+backend --> frontend : {ticket, refund_amount}
+deactivate backend
+
+frontend -> user : Show refund details
+deactivate frontend
+
+== Event Reminders ==
+
+note over email, backend
+    Background job sends
+    event reminders
+end note
+
+backend -> db : Query tickets for\nevents starting in 24h
+activate backend
+db --> backend : tickets[]
+
+loop For each ticket
+    backend -> email : Send event reminder
+    activate email
+    email --> backend : OK
+    deactivate email
+end
+
+deactivate backend
+
+@enduml

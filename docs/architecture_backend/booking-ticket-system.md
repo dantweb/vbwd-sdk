@@ -579,13 +579,39 @@ export interface ValidateTicketResponse {
 
 ---
 
+## Implementation Sprints
+
+### Booking System
+- **[Sprint 6: Booking Models & Services](./sprints/sprint-6-booking-models.md)** - Database models, business logic
+- **[Sprint 7: Booking API Routes](./sprints/sprint-7-booking-api.md)** - User and admin endpoints
+
+### Ticket System
+- **[Sprint 8: Ticket Models & Services](./sprints/sprint-8-ticket-models.md)** - Database models, QR generation
+- **[Sprint 9: Ticket API Routes](./sprints/sprint-9-ticket-api.md)** - Events, tickets, scanner API
+
+---
+
+## PlantUML Diagrams
+
+### Booking System
+- **[Booking Data Model](./puml/booking-data-model.puml)** - Entity relationships (Room, Timeslot, Booking)
+- **[Booking Flow](./puml/booking-flow.puml)** - Sequence diagram for booking lifecycle
+- **[Booking Lifecycle](./puml/booking-lifecycle.puml)** - State machine for booking status
+
+### Ticket System
+- **[Ticket Data Model](./puml/ticket-data-model.puml)** - Entity relationships (Event, Ticket, Scan)
+- **[Ticket Flow](./puml/ticket-flow.puml)** - Sequence diagram for ticket purchase and validation
+- **[Ticket Lifecycle](./puml/ticket-lifecycle.puml)** - State machine for ticket status
+
+---
+
 ## Next Steps
 
-1. Create backend implementation sprints
+1. ~~Create backend implementation sprints~~ ✓
 2. Create frontend plugin sprints
-3. Design QR code generation system
+3. ~~Design QR code generation system~~ ✓ (in Sprint 8)
 4. Plan notification templates
-5. Define refund policies
+5. ~~Define refund policies~~ ✓ (in Services)
 6. Design calendar integration (.ics files)
 
 ---
@@ -594,4 +620,5 @@ export interface ValidateTicketResponse {
 
 - [Backend Architecture](./README.md)
 - [Payment Architecture](./puml/payment-architecture.puml)
-- [Data Model](./puml/data-model.puml)
+- [Data Model](./puml/data-model.puml) (updated with booking/ticket entities)
+- [Sprint Overview](./sprints/README.md)

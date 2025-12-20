@@ -1,0 +1,106 @@
+@startuml ticket-lifecycle
+!theme plain
+title Ticket State Machine
+
+skinparam state {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+[*] --> active : Ticket purchased\n& payment confirmed
+
+state active {
+    active : Ticket is valid for use
+    active : Within validity period
+    active : QR code generated
+}
+
+active --> used : Scanned for check-in\n(single-entry events)
+active --> active : Scanned for access\n(multi-entry events)
+active --> expired : Event ended\nor validity period passed
+active --> cancelled : User cancels\n(before event)
+active --> refunded : Refund processed
+active --> active : Transferred to\nanother user
+
+state used {
+    used : Ticket has been used
+    used : Check-in recorded
+    used : Cannot be used again
+}
+
+used --> [*] : Event completed
+
+state expired {
+    expired : Validity period ended
+    expired : Event has concluded
+    expired : No refund available
+}
+
+expired --> [*] : Archived
+
+state cancelled {
+    cancelled : User cancelled
+    cancelled : No refund (late cancellation)
+    cancelled : Participant count decremented
+}
+
+cancelled --> [*] : Archived
+
+state refunded {
+    refunded : User cancelled
+    refunded : Refund processed
+    refunded : Participant count decremented
+}
+
+refunded --> [*] : Archived
+
+note right of active
+    **Active ticket:**
+    - Ready for event access
+    - QR code scannable
+    - Can be transferred
+    - Cancellation policy:
+      * 7+ days: 100% refund
+      * 3-7 days: 50% refund
+      * <3 days: No refund
+end note
+
+note right of used
+    **Used ticket:**
+    - Successfully checked in
+    - For single-entry events only
+    - Multi-entry: stays active
+end note
+
+note left of expired
+    **Expired ticket:**
+    - Event has ended
+    - Auto-transitioned by system
+    - Historical record kept
+end note
+
+note bottom of refunded
+    **Refunded ticket:**
+    - User requested cancellation
+    - Eligible for refund
+    - Payment reversed
+    - Ticket no longer valid
+end note
+
+== Ticket Types & Behavior ==
+
+note as N1
+    **Single-Entry Events:**
+    (Conferences, workshops)
+    - Ticket marked "used" after check-in
+    - Cannot re-enter
+
+    **Multi-Entry Events:**
+    (Multi-day festivals, access passes)
+    - Ticket stays "active" after scan
+    - Multiple entries allowed
+    - Each scan recorded in ticket_scan
+end note
+
+@enduml

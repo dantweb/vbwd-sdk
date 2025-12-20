@@ -1,0 +1,181 @@
+@startuml ticket-data-model
+!theme plain
+title Ticket System Data Model (ERD)
+
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor White
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+' ==================
+' EVENT DOMAIN
+' ==================
+
+entity "event" as event {
+    * **id** : BIGINT <<PK>>
+    --
+    * name : VARCHAR(200)
+    description : TEXT
+    * event_type : ENUM
+    * start_date : DATETIME
+    * end_date : DATETIME
+    location : VARCHAR(255)
+    * is_online : BOOLEAN
+    max_participants : INT
+    current_participants : INT
+    ticket_price : DECIMAL(10,2)
+    * status : ENUM
+    image_url : VARCHAR(500)
+    metadata : JSON
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    event_type: conference | workshop
+               | webinar | series | other
+    status: draft | published
+           | cancelled | completed
+}
+
+entity "event_tier" as event_tier {
+    * **id** : BIGINT <<PK>>
+    --
+    * event_id : BIGINT <<FK>>
+    * name : VARCHAR(100)
+    description : TEXT
+    * price : DECIMAL(10,2)
+    max_quantity : INT
+    sold_count : INT
+    benefits : JSON
+    * is_active : BOOLEAN
+    * created_at : DATETIME
+    --
+    For VIP, Early Bird, Group pricing
+}
+
+' ==================
+' TICKET DOMAIN
+' ==================
+
+entity "ticket" as ticket {
+    * **id** : BIGINT <<PK>>
+    --
+    * ticket_code : VARCHAR(50) <<UNIQUE>>
+    * user_id : BIGINT <<FK>>
+    * event_id : BIGINT <<FK>>
+    event_tier_id : BIGINT <<FK>>
+    * ticket_type : ENUM
+    * status : ENUM
+    * price_paid : DECIMAL(10,2)
+    * valid_from : DATETIME
+    * valid_until : DATETIME
+    payment_id : VARCHAR(255)
+    check_in_time : DATETIME
+    metadata : JSON
+    * created_at : DATETIME
+    * updated_at : DATETIME
+    --
+    ticket_type: standard | vip
+                | early_bird | group
+    status: active | used | expired
+           | cancelled | refunded
+}
+
+entity "ticket_scan" as ticket_scan {
+    * **id** : BIGINT <<PK>>
+    --
+    * ticket_id : BIGINT <<FK>>
+    * scanned_at : DATETIME
+    scan_location : VARCHAR(100)
+    * scan_type : ENUM
+    scanner_user_id : BIGINT <<FK>>
+    metadata : JSON
+    --
+    scan_type: check_in | check_out | access
+    For access control and tracking
+}
+
+entity "ticket_transfer" as ticket_transfer {
+    * **id** : BIGINT <<PK>>
+    --
+    * ticket_id : BIGINT <<FK>>
+    * from_user_id : BIGINT <<FK>>
+    * to_user_id : BIGINT <<FK>>
+    * transferred_at : DATETIME
+    notes : TEXT
+    --
+    Audit trail for ticket transfers
+}
+
+' ==================
+' RELATIONSHIPS
+' ==================
+
+' Event relationships
+event ||--o{ event_tier : "has pricing tiers"
+event ||--o{ ticket : "sells"
+
+' Event tier relationships
+event_tier ||--o{ ticket : "priced at"
+
+' Ticket relationships
+ticket ||--o{ ticket_scan : "scanned"
+ticket ||--o{ ticket_transfer : "transferred"
+
+' ==================
+' EXTERNAL RELATIONSHIPS
+' ==================
+
+entity "user" as user #LightGray {
+    * **id** : BIGINT <<PK>>
+    --
+    (external reference)
+}
+
+user ||--o{ ticket : "purchases"
+user ||--o{ ticket_scan : "scans"
+user ||--o{ ticket_transfer : "transfers from/to"
+
+' ==================
+' NOTES
+' ==================
+
+note right of event
+    **Event entity:**
+    Conferences, workshops,
+    webinars with date range.
+    Tracks participant capacity
+    and current count.
+end note
+
+note right of event_tier
+    **Event Tier:**
+    Different pricing levels
+    (Early Bird, VIP, Group).
+    Controls availability per tier.
+end note
+
+note right of ticket
+    **Ticket entity:**
+    User access token for event.
+    Unique code for QR scanning.
+    Time-bounded validity.
+end note
+
+note bottom of ticket_scan
+    **Scan audit:**
+    Every scan recorded for
+    access control and analytics.
+    Multiple scans per ticket OK.
+end note
+
+note bottom of ticket_transfer
+    **Transfer history:**
+    Tickets can be transferred
+    between users. Full audit
+    trail maintained.
+end note
+
+@enduml

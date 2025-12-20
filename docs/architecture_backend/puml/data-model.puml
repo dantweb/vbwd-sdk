@@ -196,6 +196,102 @@ entity "user_invoice" as user_invoice {
 }
 
 ' ==================
+' BOOKING DOMAIN
+' ==================
+
+entity "room" as room {
+    * **id** : BIGINT <<PK>>
+    --
+    * name : VARCHAR(100)
+    description : TEXT
+    capacity : INT
+    * room_type : ENUM
+    hourly_rate : DECIMAL(10,2)
+    * is_active : BOOLEAN
+    --
+    room_type: office | consultation
+              | meeting | treatment
+    See: booking-data-model.puml
+}
+
+entity "timeslot" as timeslot {
+    * **id** : BIGINT <<PK>>
+    --
+    * room_id : BIGINT <<FK>>
+    * start_time : DATETIME
+    * end_time : DATETIME
+    * is_available : BOOLEAN
+    price : DECIMAL(10,2)
+    --
+    See: booking-data-model.puml
+}
+
+entity "booking" as booking {
+    * **id** : BIGINT <<PK>>
+    --
+    * user_id : BIGINT <<FK>>
+    * timeslot_id : BIGINT <<FK>>
+    * room_id : BIGINT <<FK>>
+    * status : ENUM
+    * price : DECIMAL(10,2)
+    * payment_status : ENUM
+    --
+    status: pending | confirmed
+           | cancelled | completed | no_show
+    See: booking-data-model.puml
+}
+
+' ==================
+' TICKET DOMAIN
+' ==================
+
+entity "event" as event {
+    * **id** : BIGINT <<PK>>
+    --
+    * name : VARCHAR(200)
+    * event_type : ENUM
+    * start_date : DATETIME
+    * end_date : DATETIME
+    max_participants : INT
+    current_participants : INT
+    ticket_price : DECIMAL(10,2)
+    * status : ENUM
+    --
+    event_type: conference | workshop
+               | webinar | series | other
+    See: ticket-data-model.puml
+}
+
+entity "ticket" as ticket {
+    * **id** : BIGINT <<PK>>
+    --
+    * ticket_code : VARCHAR(50) <<UNIQUE>>
+    * user_id : BIGINT <<FK>>
+    * event_id : BIGINT <<FK>>
+    * ticket_type : ENUM
+    * status : ENUM
+    * price_paid : DECIMAL(10,2)
+    * valid_from : DATETIME
+    * valid_until : DATETIME
+    --
+    status: active | used | expired
+           | cancelled | refunded
+    See: ticket-data-model.puml
+}
+
+entity "ticket_scan" as ticket_scan {
+    * **id** : BIGINT <<PK>>
+    --
+    * ticket_id : BIGINT <<FK>>
+    * scanned_at : DATETIME
+    * scan_type : ENUM
+    scanner_user_id : BIGINT <<FK>>
+    --
+    scan_type: check_in | check_out | access
+    See: ticket-data-model.puml
+}
+
+' ==================
 ' RELATIONSHIPS
 ' ==================
 
@@ -204,6 +300,17 @@ user ||--o| user_details : "has"
 user ||--o{ user_case : "has"
 user ||--o{ subscription : "has"
 user ||--o{ user_invoice : "has"
+user ||--o{ booking : "makes"
+user ||--o{ ticket : "purchases"
+
+' Room & Booking relationships
+room ||--o{ timeslot : "has"
+room ||--o{ booking : "booked for"
+timeslot ||--o{ booking : "reserved in"
+
+' Event & Ticket relationships
+event ||--o{ ticket : "sells"
+ticket ||--o{ ticket_scan : "scanned"
 
 ' Tax relationships
 tax ||--o{ tax_rate : "has history"
@@ -255,6 +362,22 @@ note bottom of user_invoice
     net_amount: before tax
     tax_amount: VAT/tax portion
     amount: total (gross)
+end note
+
+note right of room
+    **Booking System:**
+    Rooms and timeslots for
+    appointment scheduling.
+    Detailed model in:
+    booking-data-model.puml
+end note
+
+note right of event
+    **Ticket System:**
+    Events and tickets for
+    conferences, workshops.
+    Detailed model in:
+    ticket-data-model.puml
 end note
 
 @enduml

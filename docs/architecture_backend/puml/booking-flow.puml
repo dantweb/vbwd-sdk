@@ -1,0 +1,210 @@
+@startuml booking-flow
+!theme plain
+title Booking Creation & Management Flow
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam roundcorner 10
+
+actor "User" as user
+participant "Frontend\n(Vue.js)" as frontend
+participant "Backend API\n(Flask)" as backend
+database "MySQL" as db
+participant "Payment Provider\n(PayPal/Stripe)" as provider
+participant "Email\nService" as email
+participant "Calendar\nService" as calendar
+
+== Room & Timeslot Discovery ==
+
+user -> frontend : Browse available rooms
+activate frontend
+
+frontend -> backend : GET /api/v1/bookings/rooms
+activate backend
+backend -> db : Query active rooms
+db --> backend : rooms[]
+backend --> frontend : {rooms: [...]}
+deactivate backend
+
+frontend -> user : Display room list
+
+user -> frontend : Select room,\nchoose date
+
+frontend -> backend : GET /api/v1/bookings/rooms/{id}/timeslots\n?date=2025-01-15
+activate backend
+backend -> db : Query available timeslots\n(is_available=true)
+db --> backend : timeslots[]
+backend --> frontend : {timeslots: [...]}
+deactivate backend
+
+frontend -> user : Display timeslot calendar
+deactivate frontend
+
+== Booking Creation ==
+
+user -> frontend : Select timeslot,\nclick "Book Now"
+activate frontend
+
+frontend -> backend : POST /api/v1/bookings\n{timeslotId, roomId, notes}
+activate backend
+
+backend -> db : Check timeslot availability
+db --> backend : timeslot (is_available=true)
+
+backend -> db : Create booking\n(status: pending)
+db --> backend : booking_id
+
+backend -> db : Reserve timeslot\n(is_available=false, temporarily)
+
+backend -> provider : Create checkout session\n{amount, currency, booking_id}
+activate provider
+provider --> backend : {session_id, checkout_url}
+deactivate provider
+
+backend --> frontend : {booking, checkout_url}
+deactivate backend
+
+frontend -> user : Redirect to payment
+deactivate frontend
+
+== Payment Processing ==
+
+user -> provider : Complete payment
+activate provider
+
+alt Payment Successful
+    provider --> user : Redirect to success_url
+
+    provider -> backend : POST /api/v1/webhooks/{provider}\n{event: payment.completed}
+    activate backend
+
+    backend -> backend : Verify webhook signature
+
+    backend -> db : Update booking\n(status: confirmed,\npayment_status: paid)
+
+    backend -> db : Confirm timeslot\n(is_available=false, permanent)
+
+    backend -> calendar : Generate .ics file
+    activate calendar
+    calendar --> backend : ics_attachment
+    deactivate calendar
+
+    backend -> email : Send confirmation\n+ calendar invite
+    activate email
+    email --> backend : OK
+    deactivate email
+
+    backend --> provider : 200 OK
+    deactivate backend
+
+else Payment Failed
+    provider --> user : Redirect to cancel_url
+
+    provider -> backend : POST /api/v1/webhooks/{provider}\n{event: payment.failed}
+    activate backend
+
+    backend -> db : Update booking\n(status: cancelled)
+
+    backend -> db : Release timeslot\n(is_available=true)
+
+    backend --> provider : 200 OK
+    deactivate backend
+end
+
+deactivate provider
+
+== Booking Cancellation ==
+
+user -> frontend : View my bookings,\nclick "Cancel"
+activate frontend
+
+frontend -> backend : PUT /api/v1/bookings/{id}/cancel
+activate backend
+
+backend -> db : Get booking with timeslot
+db --> backend : booking + timeslot
+
+backend -> backend : Calculate refund\n(based on hours_before)
+
+note right of backend
+    **Refund Policy:**
+    - 24+ hours: 100% refund
+    - 6-24 hours: 50% refund
+    - <6 hours: No refund
+end note
+
+backend -> db : Update booking\n(status: cancelled)
+
+backend -> db : Release timeslot\n(is_available=true)
+
+alt Refund Required
+    backend -> provider : Process refund\n{amount, payment_ref}
+    activate provider
+    provider --> backend : refund_confirmed
+    deactivate provider
+
+    backend -> db : Update booking\n(payment_status: refunded)
+end
+
+backend -> email : Send cancellation notice
+activate email
+email --> backend : OK
+deactivate email
+
+backend --> frontend : {booking, refund_amount}
+deactivate backend
+
+frontend -> user : Show cancellation\nconfirmation
+deactivate frontend
+
+== Booking Rescheduling ==
+
+user -> frontend : Click "Reschedule"
+activate frontend
+
+frontend -> backend : PUT /api/v1/bookings/{id}/reschedule\n{new_timeslot_id}
+activate backend
+
+backend -> db : Check new timeslot availability
+db --> backend : new_timeslot
+
+backend -> db : Release old timeslot\n(is_available=true)
+
+backend -> db : Reserve new timeslot\n(is_available=false)
+
+backend -> db : Update booking\n(timeslot_id = new)
+
+backend -> email : Send reschedule confirmation\n+ updated calendar invite
+activate email
+email --> backend : OK
+deactivate email
+
+backend --> frontend : {updated_booking}
+deactivate backend
+
+frontend -> user : Show updated booking
+deactivate frontend
+
+== Appointment Reminders ==
+
+note over email, backend
+    Background job runs periodically
+    to send appointment reminders
+end note
+
+backend -> db : Query upcoming bookings\n(start_time within 24h)
+activate backend
+db --> backend : bookings[]
+
+loop For each booking
+    backend -> email : Send reminder email
+    activate email
+    email --> backend : OK
+    deactivate email
+
+    backend -> db : Create reminder record\n(status: sent)
+end
+
+deactivate backend
+
+@enduml
