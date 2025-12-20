@@ -236,6 +236,6 @@ npm run test:e2e
 ## Related Documentation
 
 - [Admin Architecture Overview](../README.md)
-- [Core SDK Documentation](../../architecture_core_sdk/README.md)
-- [User App Architecture](../../architecture_frontend/README.md)
-- [Backend Architecture](../../architecture_backend/README.md)
+- [Core SDK Documentation](../../architecture_core_view_sdk/README.md)
+- [User App Architecture](../../architecture_core_view_user/README.md)
+- [Server Architecture](../../architecture_server/README.md)

@@ -567,6 +567,6 @@ export * from './types';
 
 ## Related Documentation
 
-- [User App Architecture](../architecture_frontend/README.md)
-- [Admin App Architecture](../architecture_admin/README.md)
-- [Backend Architecture](../architecture_backend/README.md)
+- [User App Architecture](../architecture_core_view_user/README.md)
+- [Admin App Architecture](../architecture_core_view_admin/README.md)
+- [Server Architecture](../architecture_server/README.md)

@@ -263,7 +263,7 @@ npm run build
 ## Related Documentation
 
 - [Frontend Architecture Overview](../README.md)
-- [Backend Architecture](../../architecture_backend/README.md)
+- [Server Architecture](../../architecture_server/README.md)
 - [Plugin Development Guide](../plugin-development.md) *(to be created)*
 - [API Documentation](../../api/README.md) *(to be created)*
 
@@ -274,5 +274,5 @@ npm run build
 For questions about frontend architecture or sprint planning:
 1. Review the main [Frontend Architecture README](../README.md)
 2. Check individual sprint documents
-3. Review [Backend Architecture](../../architecture_backend/README.md) for API contracts
+3. Review [Server Architecture](../../architecture_server/README.md) for API contracts
 4. Consult [CLAUDE.md](../../../CLAUDE.md) for development guidance

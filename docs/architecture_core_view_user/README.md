@@ -759,7 +759,7 @@ All architecture diagrams are available in PlantUML format:
 ## 12. Related Documentation
 
 ### Architecture Documents
-- [Backend Architecture](../architecture_backend/README.md) - Flask API documentation
+- [Server Architecture](../architecture_server/README.md) - Flask API documentation
 - [Sprint Plans](./sprints/README.md) - Frontend implementation sprints
 
 ### Other Documentation

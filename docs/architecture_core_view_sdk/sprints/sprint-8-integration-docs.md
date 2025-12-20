@@ -535,5 +535,5 @@ describe('Performance Benchmarks', () => {
 ## Next Steps
 
 After Sprint 8, the Core SDK is ready to be consumed by:
-- [User App Sprints](../../architecture_frontend/sprints/README.md)
-- [Admin App Sprints](../../architecture_admin/sprints/README.md)
+- [User App Sprints](../../architecture_core_view_user/sprints/README.md)
+- [Admin App Sprints](../../architecture_core_view_admin/sprints/README.md)

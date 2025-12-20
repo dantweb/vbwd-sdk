@@ -548,7 +548,7 @@ All admin architecture diagrams:
 
 ## Related Documentation
 
-- [Core SDK Documentation](../architecture_core_sdk/README.md)
-- [User App Architecture](../architecture_frontend/README.md)
-- [Backend Architecture](../architecture_backend/README.md)
+- [Core SDK Documentation](../architecture_core_view_sdk/README.md)
+- [User App Architecture](../architecture_core_view_user/README.md)
+- [Server Architecture](../architecture_server/README.md)
 - [Admin Sprint Plans](./sprints/README.md)

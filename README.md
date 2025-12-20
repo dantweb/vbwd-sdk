@@ -180,10 +180,10 @@ vbwd-sdk/
 │   ├── user/vue/        # User application
 │   └── admin/vue/       # Admin application
 └── docs/
-    ├── architecture_backend/
-    ├── architecture_frontend/
-    ├── architecture_admin/
+    ├── architecture_server/
     ├── architecture_core_view_sdk/
+    ├── architecture_core_view_user/
+    ├── architecture_core_view_admin/
     └── README_MARKET.md
 ```
 
@@ -192,8 +192,10 @@ vbwd-sdk/
 ## Documentation
 
 - **Market Positioning**: [docs/README_MARKET.md](docs/README_MARKET.md)
-- **Backend Architecture**: [docs/architecture_backend/README.md](docs/architecture_backend/README.md)
-- **Core SDK Sprints**: [docs/architecture_core_view_sdk/sprints/](docs/architecture_core_view_sdk/sprints/)
+- **Server Architecture**: [docs/architecture_server/README.md](docs/architecture_server/README.md)
+- **Core SDK Architecture**: [docs/architecture_core_view_sdk/](docs/architecture_core_view_sdk/)
+- **User App Architecture**: [docs/architecture_core_view_user/](docs/architecture_core_view_user/)
+- **Admin App Architecture**: [docs/architecture_core_view_admin/](docs/architecture_core_view_admin/)
 - **Development Guidelines**: [CLAUDE.md](CLAUDE.md)
 
 ---

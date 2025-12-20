@@ -343,6 +343,6 @@ npm install @vbwd/core-sdk@1.0.0
 ## Related Documentation
 
 - [Core SDK Architecture](../README.md)
-- [User App Architecture](../../architecture_frontend/README.md)
-- [Admin App Architecture](../../architecture_admin/README.md)
-- [Backend Architecture](../../architecture_backend/README.md)
+- [User App Architecture](../../architecture_core_view_user/README.md)
+- [Admin App Architecture](../../architecture_core_view_admin/README.md)
+- [Server Architecture](../../architecture_server/README.md)
