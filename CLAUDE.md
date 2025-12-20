@@ -17,7 +17,7 @@ License: CC0 1.0 Universal (Public Domain)
   - User app: `frontend/user/vue/`
   - Admin app: `frontend/admin/vue/`
 - **python**: Python 3.11 / Flask API (port 5000)
-- **mysql**: MySQL 8.0 database
+- **postgres**: PostgreSQL 16 database
 
 ### Key Components
 - **Fire-and-forget submission**: Returns 202, processes in background thread
@@ -59,12 +59,12 @@ make logs
 # View specific service logs
 make logs-python
 make logs-frontend
-make logs-mysql
+make logs-postgres
 
 # Shell access
 make shell-python
 make shell-frontend
-make shell-mysql
+make shell-postgres
 
 # Health check (verify inter-container connectivity)
 make health
@@ -124,7 +124,7 @@ container/           # Dockerfiles per service
     Dockerfile       # Production Python image
     Dockerfile.test  # Test runner image
   frontend/
-  mysql/
+  postgres/
 ```
 
 ## API Workflow
@@ -168,10 +168,9 @@ Copy `.env.example` to `.env` and configure:
 - `FLASK_SECRET_KEY`: Session encryption key
 - `LOOPAI_API_URL`: External diagnostic API endpoint (default: http://loopai-web:5000)
 - `LOOPAI_API_KEY`: API authentication key
-- `MYSQL_ROOT_PASSWORD`: MySQL root password
-- `MYSQL_DATABASE`: Database name (default: vbwd)
-- `MYSQL_USER`: Database user (default: vbwd)
-- `MYSQL_PASSWORD`: Database password (default: vbwd)
+- `POSTGRES_PASSWORD`: PostgreSQL password
+- `POSTGRES_DB`: Database name (default: vbwd)
+- `POSTGRES_USER`: Database user (default: vbwd)
 
 ## Key Design Patterns
 
@@ -194,10 +193,10 @@ This verifies:
 - Backend → Database connectivity
 
 ### Database Connection
-If MySQL connection fails, ensure:
-1. MySQL service is healthy: `docker-compose ps`
+If PostgreSQL connection fails, ensure:
+1. PostgreSQL service is healthy: `docker-compose ps`
 2. Credentials in `.env` match `docker-compose.yaml`
-3. Wait for MySQL healthcheck to pass (10s intervals)
+3. Wait for PostgreSQL healthcheck to pass (pg_isready)
 
 ## Documentation
 

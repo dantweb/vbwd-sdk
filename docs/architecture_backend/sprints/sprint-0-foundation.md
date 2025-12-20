@@ -59,13 +59,13 @@ services:
       - "5000:5000"
     environment:
       - FLASK_ENV=development
-      - DATABASE_URL=mysql+pymysql://user:password@mysql:3306/vbwd
+      - DATABASE_URL=postgresql://user:password@postgres:5432/vbwd
       - SECRET_KEY=${SECRET_KEY}
     volumes:
       - ./python/api:/app
       - ./data/python/logs:/app/logs
     depends_on:
-      - mysql
+      - postgres
     command: ["flask", "run", "--host=0.0.0.0", "--reload"]
 ```
 
@@ -83,7 +83,7 @@ gunicorn==21.2.0
 # Database
 SQLAlchemy==2.0.23
 Flask-SQLAlchemy==3.1.1
-PyMySQL==1.1.0
+psycopg2-binary==2.9.9
 cryptography==41.0.7
 alembic==1.13.0
 
@@ -244,7 +244,7 @@ class Config:
     SECRET_KEY: str = os.environ.get("SECRET_KEY", "dev-secret-key")
     SQLALCHEMY_DATABASE_URI: str = os.environ.get(
         "DATABASE_URL",
-        "mysql+pymysql://user:password@localhost:3306/vbwd"
+        "postgresql://user:password@localhost:5432/vbwd"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
     SQLALCHEMY_ECHO: bool = False

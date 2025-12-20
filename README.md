@@ -24,7 +24,7 @@ The platform provides turnkey solutions for:
 **Technology Stack:**
 - Frontend: Vue.js 3 (User App + Admin App) with Core SDK
 - Backend: Python 3 / Flask API
-- Database: MySQL
+- Database: PostgreSQL 16
 - Deployment: Docker containerized architecture
 
 ---

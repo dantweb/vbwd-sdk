@@ -16,7 +16,7 @@ def create_app(config_name=None):
     app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
         'DATABASE_URL',
-        'mysql+pymysql://vbwd:vbwd@mysql:3306/vbwd'
+        'postgresql://vbwd:vbwd@postgres:5432/vbwd'
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 

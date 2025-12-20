@@ -26,30 +26,35 @@ services:
       - ./data/python/logs:/app/logs
     environment:
       - FLASK_ENV=development
-      - DATABASE_URL=mysql+pymysql://vbwd:vbwd@mysql:3306/vbwd
+      - DATABASE_URL=postgresql://vbwd:vbwd@postgres:5432/vbwd
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-dev-secret-key}
       - LOOPAI_API_URL=${LOOPAI_API_URL:-http://loopai-web:5000}
       - LOOPAI_API_KEY=${LOOPAI_API_KEY:-}
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     networks:
       - vbwd-network
 
-  mysql:
-    image: mysql:8.0
+  postgres:
+    image: postgres:16-alpine
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - ./data/mysql:/var/lib/mysql
-      - ./container/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./container/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root}
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-vbwd}
-      - MYSQL_USER=${MYSQL_USER:-vbwd}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-vbwd}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-vbwd}
+      - POSTGRES_DB=${POSTGRES_DB:-vbwd}
+      - POSTGRES_USER=${POSTGRES_USER:-vbwd}
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c max_connections=200
+      -c work_mem=4MB
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vbwd}"]
       interval: 10s
       timeout: 5s
       retries: 5

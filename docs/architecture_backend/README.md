@@ -32,7 +32,7 @@ Users browse tariff plans on a static frontend, select a plan, proceed to checko
 +---------------------------------------------------------------------+
 |                                                                      |
 |   +--------------+     +---------------+     +--------------+        |
-|   |  frontend    |     |    python     |     |    mysql     |        |
+|   |  frontend    |     |    python     |     |   postgres   |        |
 |   |  (Vue.js)    |<--->|   (Flask)     |<--->|    (DB)      |        |
 |   +--------------+     +---------------+     +--------------+        |
 |         |                    |                     |                 |
@@ -42,7 +42,7 @@ Users browse tariff plans on a static frontend, select a plan, proceed to checko
 |   |                    data/ (volumes)                            |  |
 |   |   +-- python/logs/                                            |  |
 |   |   +-- frontend/logs/                                          |  |
-|   |   +-- mysql/ (binary data)                                    |  |
+|   |   +-- postgres/ (binary data)                                 |  |
 |   +---------------------------------------------------------------+  |
 |                                                                      |
 |                    +-------------------------+                       |
@@ -62,7 +62,7 @@ Users browse tariff plans on a static frontend, select a plan, proceed to checko
 | Frontend (User) | Vue.js 3           | frontend   |
 | Frontend (Admin)| Vue.js 3           | frontend   |
 | Backend API     | Python 3 / Flask   | python     |
-| Database        | MySQL              | mysql      |
+| Database        | PostgreSQL 16      | postgres   |
 | Payments        | PayPal, Stripe     | external   |
 
 ### 2.3 API Architecture (Headless)
@@ -78,7 +78,7 @@ The backend is a pure REST API with no server-side rendering:
                               +------+------+
                               |             |
                         +-----v-----+ +-----v-----+
-                        |  MySQL    | | External  |
+                        | PostgreSQL| | External  |
                         |  Database | | APIs      |
                         +-----------+ +-----------+
 ```
@@ -556,13 +556,13 @@ vbwd-sdk/
 +-- container/                 # Docker configuration per container
 |   +-- frontend/
 |   +-- python/
-|   +-- mysql/
+|   +-- postgres/
 +-- data/                      # Persistent data & logs
 |   +-- python/
 |   |   +-- logs/
 |   +-- frontend/
 |   |   +-- logs/
-|   +-- mysql/                 # MySQL binary data
+|   +-- postgres/              # PostgreSQL binary data
 +-- python/                    # Python backend root
 |   +-- api/
 |       +-- requirements.txt
