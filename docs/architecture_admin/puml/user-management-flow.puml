@@ -1,0 +1,107 @@
+@startuml user-management-flow
+!theme plain
+title Admin - User Management Flow
+
+|Admin|
+start
+:Navigate to /admin/users;
+
+|Frontend|
+:Display user list\n(loading state);
+
+|Backend API|
+:Query users from database;
+:Apply pagination (page 1, limit 25);
+:Return user list;
+
+|Frontend|
+:Display users in table;
+:Show pagination controls;
+
+|Admin|
+:Search for user\n(by email);
+
+|Frontend|
+:Filter table\n(client-side or API call);
+
+if (User found?) then (yes)
+  |Admin|
+  :Click user row;
+
+  |Frontend|
+  :Navigate to /admin/users/:id;
+  :Load user details;
+
+  |Backend API|
+  :Get user by ID;
+  :Get user details;
+  :Get user subscriptions;
+  :Get user invoices;
+  :Return complete user data;
+
+  |Frontend|
+  :Display user details;
+  :Show tabs:\n- Profile\n- Subscriptions\n- Invoices;
+
+  |Admin|
+  :Click "Suspend User";
+
+  |Frontend|
+  :Show confirmation dialog;
+
+  |Admin|
+  :Confirm suspension;
+
+  |Frontend|
+  :Call API to suspend user;
+
+  |Backend API|
+  :Update user status = 'suspended';
+  :Log admin action;
+  :Return success;
+
+  |Frontend|
+  :Show success toast;
+  :Update UI (status badge);
+
+  |Admin|
+  :View updated status;
+  stop
+else (no)
+  |Admin|
+  :Refine search;
+  |Frontend|
+  stop
+endif
+
+note right
+  **Admin Endpoints:**
+
+  GET /api/v1/admin/users
+    ?page=1&limit=25&search=email
+
+  GET /api/v1/admin/users/:id
+
+  PUT /api/v1/admin/users/:id/status
+    { status: "suspended" }
+
+  Requires JWT with role="admin"
+end note
+
+note left of Frontend
+  **User List Features:**
+
+  - Pagination (25/50/100 per page)
+  - Search by email
+  - Filter by status
+  - Sort by created_at, email
+  - Bulk actions (future)
+
+  **User Details Tabs:**
+  - Profile: Edit name, email, role
+  - Subscriptions: Active/expired list
+  - Invoices: Payment history
+  - Activity Log: Admin actions
+end note
+
+@enduml

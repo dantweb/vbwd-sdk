@@ -1,0 +1,162 @@
+@startuml admin-plugin-architecture
+!theme plain
+title Admin Application - Plugin Architecture
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+package "Admin Application" #FFF3E0 {
+    [Admin Shell\n(Vue.js + Router)] as Shell
+
+    package "Admin Layout" {
+        [AdminLayout.vue] as Layout
+        [AdminTopbar.vue] as Topbar
+        [AdminSidebar.vue] as Sidebar
+    }
+
+    Shell --> Layout
+    Layout --> Topbar
+    Layout --> Sidebar
+}
+
+package "Core SDK (Shared)" #E8F5E9 {
+    [PluginRegistry] as Registry
+    interface "IPlugin" as IPlugin
+    [PlatformSDK] as SDK
+    [ApiClient] as API
+    [AuthService] as Auth
+}
+
+Shell --> Registry
+Shell --> SDK
+
+package "Admin Plugins" #E3F2FD {
+
+    package "User Management Plugin" {
+        component "UserMgmtPlugin" as UserPlugin
+
+        [userAdminStore] as UserStore
+        [UserList.vue] as UserList
+        [UserDetails.vue] as UserDetails
+        [UserEditForm.vue] as UserEdit
+    }
+
+    package "Plan Management Plugin" {
+        component "PlanMgmtPlugin" as PlanPlugin
+
+        [planAdminStore] as PlanStore
+        [PlanList.vue] as PlanList
+        [PlanForm.vue] as PlanForm
+        [PlanPricingMatrix.vue] as PlanPricing
+    }
+
+    package "Analytics Plugin" {
+        component "AnalyticsPlugin" as AnalyticsPlugin
+
+        [analyticsStore] as AnalyticsStore
+        [AnalyticsDashboard.vue] as AnalyticsDash
+        [RevenueChart.vue] as RevenueChart
+        [UserGrowthChart.vue] as UserGrowth
+    }
+
+    package "Invoice Management Plugin" {
+        component "InvoiceMgmtPlugin" as InvoicePlugin
+
+        [invoiceAdminStore] as InvoiceStore
+        [InvoiceList.vue] as InvoiceList
+        [InvoiceDetails.vue] as InvoiceDetails
+    }
+}
+
+' Plugin implementations
+IPlugin <|.. UserPlugin
+IPlugin <|.. PlanPlugin
+IPlugin <|.. AnalyticsPlugin
+IPlugin <|.. InvoicePlugin
+
+Registry --> UserPlugin : loads
+Registry --> PlanPlugin : loads
+Registry --> AnalyticsPlugin : loads
+Registry --> InvoicePlugin : loads
+
+' Plugin internal structure
+UserPlugin --> UserStore : creates
+UserPlugin --> UserList : registers
+UserPlugin --> UserDetails : registers
+UserPlugin --> UserEdit : registers
+
+PlanPlugin --> PlanStore : creates
+PlanPlugin --> PlanList : registers
+PlanPlugin --> PlanForm : registers
+PlanPlugin --> PlanPricing : registers
+
+AnalyticsPlugin --> AnalyticsStore : creates
+AnalyticsPlugin --> AnalyticsDash : registers
+AnalyticsPlugin --> RevenueChart : registers
+AnalyticsPlugin --> UserGrowth : registers
+
+InvoicePlugin --> InvoiceStore : creates
+InvoicePlugin --> InvoiceList : registers
+InvoicePlugin --> InvoiceDetails : registers
+
+' API usage
+UserStore --> API : GET /api/v1/admin/users
+PlanStore --> API : GET /api/v1/admin/tarif-plans
+AnalyticsStore --> API : GET /api/v1/admin/analytics/*
+InvoiceStore --> API : GET /api/v1/admin/invoices
+
+' Auth check
+UserPlugin --> Auth : requires admin role
+PlanPlugin --> Auth : requires admin role
+AnalyticsPlugin --> Auth : requires admin role
+InvoicePlugin --> Auth : requires admin role
+
+note right of Registry
+  PluginRegistry manages
+  admin plugin lifecycle:
+  - register()
+  - load()
+  - activate()
+  - deactivate()
+end note
+
+note bottom of API
+  All admin plugins use
+  admin-specific endpoints:
+  /api/v1/admin/*
+
+  JWT must contain:
+  role: "admin"
+end note
+
+note left of UserPlugin
+  **User Management**
+
+  Routes:
+  /admin/users
+  /admin/users/:id
+  /admin/users/:id/edit
+
+  Actions:
+  - List/search users
+  - View user details
+  - Edit user
+  - Suspend/activate
+end note
+
+note right of PlanPlugin
+  **Plan Management**
+
+  Routes:
+  /admin/plans
+  /admin/plans/new
+  /admin/plans/:id/edit
+
+  Actions:
+  - List plans
+  - Create/edit plans
+  - Set pricing
+  - Activate/deactivate
+end note
+
+@enduml

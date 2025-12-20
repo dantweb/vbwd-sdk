@@ -1,0 +1,102 @@
+@startuml state-management
+!theme plain
+title State Management - Pinia Stores
+
+skinparam packageStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+package "Core Stores" #E3F2FD {
+    package "authStore" {
+        component "State" as AuthState
+        component "Getters" as AuthGetters
+        component "Actions" as AuthActions
+    }
+}
+
+package "Plugin Stores" #FFF3E0 {
+    package "wizardStore" {
+        component "State" as WizardState
+        component "Getters" as WizardGetters
+        component "Actions" as WizardActions
+    }
+
+    package "userStore" {
+        component "State" as UserState
+        component "Actions" as UserActions
+    }
+
+    package "subscriptionStore" {
+        component "State" as SubState
+        component "Getters" as SubGetters
+        component "Actions" as SubActions
+    }
+}
+
+package "Services (Dependencies)" #E8F5E9 {
+    [ApiClient] as API
+    [AuthService] as AuthSvc
+    [EventBus] as Events
+}
+
+' Store relationships
+AuthActions --> API : uses
+AuthActions --> Events : emits\n(USER_LOGGED_IN,\nUSER_LOGGED_OUT)
+
+WizardActions --> API : uses
+WizardActions --> AuthState : reads
+WizardActions --> Events : emits\n(CHECKOUT_STARTED,\nCHECKOUT_COMPLETED)
+
+UserActions --> API : uses
+UserActions --> AuthState : reads
+
+SubActions --> API : uses
+SubActions --> AuthState : reads
+SubActions --> Events : emits\n(SUBSCRIPTION_CHANGED)
+
+' Component usage
+package "Components" #F3E5F5 {
+    [WizardContainer] as WizComp
+    [ProfileForm] as ProfileComp
+    [SubscriptionList] as SubComp
+    [LoginForm] as LoginComp
+}
+
+WizComp ..> WizardState : reads
+WizComp ..> WizardActions : calls
+
+ProfileComp ..> UserState : reads
+ProfileComp ..> UserActions : calls
+
+SubComp ..> SubState : reads
+SubComp ..> SubActions : calls
+
+LoginComp ..> AuthActions : calls
+
+note right of authStore
+  **authStore** is the central
+  authentication state.
+
+  All other stores depend on
+  authStore for user identity
+  and authentication status.
+end note
+
+note bottom of wizardStore
+  **wizardStore** is isolated
+  to the Wizard plugin.
+
+  State is reset when wizard
+  is completed or cancelled.
+end note
+
+note right of Events
+  **EventBus** allows stores to
+  communicate without direct
+  coupling.
+
+  Example: wizardStore emits
+  CHECKOUT_COMPLETED, which
+  subscriptionStore listens to.
+end note
+
+@enduml

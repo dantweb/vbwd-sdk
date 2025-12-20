@@ -1,0 +1,135 @@
+@startuml component-tree
+!theme plain
+title Component Hierarchy - Wizard Plugin
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+package "App Shell" #E3F2FD {
+    [App.vue] as App
+    [router-view] as RouterView
+}
+
+package "Wizard Plugin Routes" #FFF3E0 {
+    package "/wizard" {
+        [WizardContainer.vue] as Container
+
+        package "Steps" {
+            [StepUpload.vue] as Step1
+            [StepGdpr.vue] as Step2
+            [StepPlans.vue] as Step3
+            [StepCheckout.vue] as Step4
+        }
+    }
+}
+
+package "Shared Components" #E8F5E9 {
+    package "Wizard Shared" {
+        [ProgressBar.vue] as Progress
+        [WizardStep.vue] as StepWrapper
+        [ValidationError.vue] as ValidationError
+    }
+
+    package "Upload Components" {
+        [FileUpload.vue] as FileUpload
+        [FilePreview.vue] as FilePreview
+    }
+
+    package "Plan Components" {
+        [PlanCard.vue] as PlanCard
+        [PlanComparison.vue] as PlanComparison
+        [FeatureList.vue] as FeatureList
+    }
+
+    package "Form Components" {
+        [Input.vue] as Input
+        [Checkbox.vue] as Checkbox
+        [Button.vue] as Button
+        [Select.vue] as Select
+    }
+}
+
+package "Composables" #F3E5F5 {
+    [useWizard()] as UseWizard
+    [useFileUpload()] as UseFileUpload
+    [useValidation()] as UseValidation
+    [useApi()] as UseApi
+}
+
+package "Stores (Pinia)" #E1F5FE {
+    [wizardStore] as WizardStore
+    [authStore] as AuthStore
+}
+
+' Hierarchy
+App --> RouterView
+RouterView --> Container
+
+Container --> Progress
+Container --> Step1
+Container --> Step2
+Container --> Step3
+Container --> Step4
+
+Step1 --> StepWrapper
+Step1 --> FileUpload
+Step1 --> ValidationError
+
+Step2 --> StepWrapper
+Step2 --> Input
+Step2 --> Checkbox
+Step2 --> ValidationError
+
+Step3 --> StepWrapper
+Step3 --> PlanCard
+Step3 --> PlanComparison
+
+Step4 --> StepWrapper
+Step4 --> Input
+Step4 --> Select
+Step4 --> Button
+
+FileUpload --> FilePreview
+
+PlanCard --> FeatureList
+
+' Composable usage
+Container ..> UseWizard : uses
+Step1 ..> UseFileUpload : uses
+Step1 ..> UseValidation : uses
+Step3 ..> UseApi : uses
+Step4 ..> UseApi : uses
+
+' Store connections
+UseWizard --> WizardStore : accesses
+UseApi --> AuthStore : accesses
+
+note right of Container
+  WizardContainer manages:
+  - Progress bar display
+  - Step transitions
+  - Navigation buttons
+  - Current step rendering
+end note
+
+note right of WizardStore
+  State Management:
+  - currentStep: number
+  - step1Data: FileUploadData
+  - step2Data: GdprData
+  - step3Data: { selectedPlan }
+  - step4Data: CheckoutData
+  - availablePlans: TariffPlan[]
+  - errors: ValidationErrors
+end note
+
+note bottom of UseWizard
+  Wizard Logic:
+  - validateCurrentStep()
+  - goNext()
+  - goBack()
+  - goToStep(n)
+  - submitCheckout()
+end note
+
+@enduml

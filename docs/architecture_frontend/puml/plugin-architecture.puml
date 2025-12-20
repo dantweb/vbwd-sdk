@@ -1,0 +1,120 @@
+@startuml plugin-architecture
+!theme plain
+title VBWD Frontend - Plugin System Architecture
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam component {
+    BackgroundColor<<core>> #E3F2FD
+    BorderColor<<core>> #1976D2
+    BackgroundColor<<plugin>> #FFF3E0
+    BorderColor<<plugin>> #F57C00
+    BackgroundColor<<sdk>> #E8F5E9
+    BorderColor<<sdk>> #388E3C
+}
+
+package "Application Shell" {
+    [Vue.js App] as App
+    [Vue Router] as Router
+    [Pinia Stores] as Pinia
+}
+
+package "Core SDK Layer" <<sdk>> {
+    interface "IPlugin" as IPlugin
+    [PluginRegistry] as Registry
+    [PluginLoader] as Loader
+
+    interface "IApiClient" as IApiClient
+    [ApiClient] as ApiClientImpl
+
+    interface "IAuthService" as IAuthService
+    [AuthService] as AuthServiceImpl
+
+    interface "IEventBus" as IEventBus
+    [EventBus] as EventBusImpl
+
+    [PlatformSDK] as SDK
+}
+
+package "Plugin Layer" <<plugin>> {
+    package "Wizard Plugin" {
+        [WizardPlugin] as WizardPlugin
+        [WizardStore] as WizardStore
+        [WizardComponents] as WizardComponents
+        [WizardRoutes] as WizardRoutes
+    }
+
+    package "User Cabinet Plugin" {
+        [CabinetPlugin] as CabinetPlugin
+        [UserStore] as UserStore
+        [SubscriptionStore] as SubStore
+        [CabinetComponents] as CabinetComponents
+    }
+
+    package "Admin Plugin" {
+        [AdminPlugin] as AdminPlugin
+        [AdminStore] as AdminStore
+        [AdminComponents] as AdminComponents
+    }
+}
+
+' Relationships
+App --> Router
+App --> Pinia
+App --> Registry : registers plugins
+
+Registry --> IPlugin : manages
+Loader --> IPlugin : loads
+Registry --> Loader : uses
+
+SDK --> IApiClient : provides
+SDK --> IAuthService : provides
+SDK --> IEventBus : provides
+SDK --> Router : provides
+
+IApiClient <|.. ApiClientImpl : implements
+IAuthService <|.. AuthServiceImpl : implements
+IEventBus <|.. EventBusImpl : implements
+
+IPlugin <|.. WizardPlugin : implements
+IPlugin <|.. CabinetPlugin : implements
+IPlugin <|.. AdminPlugin : implements
+
+WizardPlugin --> SDK : uses
+WizardPlugin --> WizardStore : creates
+WizardPlugin --> WizardComponents : registers
+WizardPlugin --> WizardRoutes : adds to Router
+
+CabinetPlugin --> SDK : uses
+CabinetPlugin --> UserStore : creates
+CabinetPlugin --> SubStore : creates
+CabinetPlugin --> CabinetComponents : registers
+
+AdminPlugin --> SDK : uses
+AdminPlugin --> AdminStore : creates
+AdminPlugin --> AdminComponents : registers
+
+WizardStore --> IApiClient : calls
+UserStore --> IApiClient : calls
+SubStore --> IApiClient : calls
+AdminStore --> IApiClient : calls
+
+note right of IPlugin
+  All plugins implement IPlugin:
+  - name: string
+  - version: string
+  - install(app, sdk)
+  - activate?()
+  - deactivate?()
+  - registerRoutes?()
+  - registerComponents?()
+  - registerStores?()
+end note
+
+note bottom of SDK
+  PlatformSDK provides unified
+  access to core services for
+  all plugins
+end note
+
+@enduml

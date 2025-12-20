@@ -1,0 +1,177 @@
+@startuml dual-app-architecture
+!theme plain
+title VBWD Platform - Dual App Architecture with Shared Core SDK
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam component {
+    BackgroundColor<<core>> #E8F5E9
+    BorderColor<<core>> #388E3C
+    BackgroundColor<<user>> #E3F2FD
+    BorderColor<<user>> #1976D2
+    BackgroundColor<<admin>> #FFF3E0
+    BorderColor<<admin>> #F57C00
+}
+
+package "Frontend Applications" {
+
+    package "User App" <<user>> {
+        component "User App Shell" as UserShell
+
+        package "User Plugins" {
+            [Wizard Plugin] as WizardPlugin
+            [User Cabinet Plugin] as CabinetPlugin
+        }
+
+        UserShell --> WizardPlugin
+        UserShell --> CabinetPlugin
+    }
+
+    package "Admin App" <<admin>> {
+        component "Admin App Shell" as AdminShell
+
+        package "Admin Plugins" {
+            [User Management\nPlugin] as UserMgmt
+            [Plan Management\nPlugin] as PlanMgmt
+            [Analytics Plugin] as Analytics
+            [Invoice Mgmt\nPlugin] as InvoiceMgmt
+        }
+
+        AdminShell --> UserMgmt
+        AdminShell --> PlanMgmt
+        AdminShell --> Analytics
+        AdminShell --> InvoiceMgmt
+    }
+
+    package "Core SDK (@vbwd/core-sdk)" <<core>> {
+        package "Plugin System" {
+            [IPlugin Interface] as IPlugin
+            [PluginRegistry] as Registry
+            [PluginLoader] as Loader
+        }
+
+        package "Services" {
+            interface "IApiClient" as IApiClient
+            [ApiClient] as APIImpl
+
+            interface "IAuthService" as IAuthService
+            [AuthService] as AuthImpl
+
+            interface "IEventBus" as IEventBus
+            [EventBus] as EventImpl
+        }
+
+        package "Shared Components" {
+            [UI Components] as UIComponents
+        }
+
+        package "Composables" {
+            [Composables] as Composables
+        }
+
+        package "Types" {
+            [Common Types] as Types
+        }
+    }
+}
+
+' User app connections
+UserShell ..> Registry : uses
+UserShell ..> IApiClient : uses
+UserShell ..> IAuthService : uses
+
+WizardPlugin ..|> IPlugin : implements
+CabinetPlugin ..|> IPlugin : implements
+
+WizardPlugin ..> IApiClient : uses
+WizardPlugin ..> UIComponents : uses
+CabinetPlugin ..> IApiClient : uses
+CabinetPlugin ..> UIComponents : uses
+
+' Admin app connections
+AdminShell ..> Registry : uses
+AdminShell ..> IApiClient : uses
+AdminShell ..> IAuthService : uses
+
+UserMgmt ..|> IPlugin : implements
+PlanMgmt ..|> IPlugin : implements
+Analytics ..|> IPlugin : implements
+InvoiceMgmt ..|> IPlugin : implements
+
+UserMgmt ..> IApiClient : uses (admin endpoints)
+UserMgmt ..> UIComponents : uses
+PlanMgmt ..> IApiClient : uses (admin endpoints)
+PlanMgmt ..> UIComponents : uses
+Analytics ..> IApiClient : uses
+InvoiceMgmt ..> IApiClient : uses
+
+' Core SDK internal
+IApiClient <|.. APIImpl
+IAuthService <|.. AuthImpl
+IEventBus <|.. EventImpl
+
+Registry --> IPlugin
+Loader --> IPlugin
+
+' Backend
+package "Backend API" #FFEBEE {
+    [Flask API\n/api/v1/*] as Backend
+}
+
+APIImpl --> Backend : HTTP/HTTPS
+
+note right
+  **Shared Core SDK**
+
+  Single source of truth for:
+  - Plugin architecture
+  - API client & auth
+  - Validation
+  - UI components
+  - Types & utilities
+
+  Symlinked in both apps:
+  frontend/user/vue/node_modules/@vbwd/core
+  frontend/admin/vue/node_modules/@vbwd/core
+end note
+
+note left
+  **User-Facing Application**
+
+  Port: 8080
+  Base Path: /
+
+  Plugins:
+  - Wizard (subscription flow)
+  - User Cabinet (self-service)
+
+  Auth: Regular users
+end note
+
+note right
+  **Admin Dashboard**
+
+  Port: 8081
+  Base Path: /admin
+
+  Plugins:
+  - User Management
+  - Plan Management
+  - Analytics
+  - Invoice Management
+  - Webhooks
+  - Settings
+
+  Auth: Admin role required
+end note
+
+note bottom of Backend
+  Backend serves both:
+  - User endpoints: /api/v1/user/*
+  - Admin endpoints: /api/v1/admin/*
+
+  Admin endpoints require
+  role: "admin" in JWT
+end note
+
+@enduml

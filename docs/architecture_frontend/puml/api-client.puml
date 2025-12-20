@@ -1,0 +1,144 @@
+@startuml api-client
+!theme plain
+title API Client Architecture
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam interface {
+    BackgroundColor #E3F2FD
+    BorderColor #1976D2
+}
+skinparam component {
+    BackgroundColor<<impl>> #FFF3E0
+    BorderColor<<impl>> #F57C00
+}
+
+package "API Client Layer" {
+
+    interface "IApiClient" as IApiClient
+    note right of IApiClient
+        + auth: AuthEndpoints
+        + user: UserEndpoints
+        + tariffs: TariffEndpoints
+        + checkout: CheckoutEndpoints
+        --
+        + get<T>(url, config)
+        + post<T>(url, data, config)
+        + put<T>(url, data, config)
+        + delete<T>(url, config)
+    end note
+
+    component "ApiClient" <<impl>> as ApiClientImpl
+
+    package "Endpoints" {
+        component "auth" as AuthAPI
+        component "user" as UserAPI
+        component "tariffs" as TariffAPI
+        component "checkout" as CheckoutAPI
+    }
+
+    package "Interceptors" {
+        component "Request\nInterceptor" as ReqInt
+        component "Response\nInterceptor" as ResInt
+    }
+
+    package "Type Definitions" {
+        component "Request Types" as ReqTypes
+        component "Response Types" as ResTypes
+    }
+}
+
+package "HTTP Client" #E8F5E9 {
+    [Axios Instance] as Axios
+}
+
+package "Storage" #F3E5F5 {
+    [LocalStorage] as Storage
+}
+
+package "Error Handling" #FFEBEE {
+    component "ErrorNormalizer" as Normalizer
+}
+
+' Relationships
+IApiClient <|.. ApiClientImpl : implements
+
+ApiClientImpl --> Axios : uses
+ApiClientImpl --> AuthAPI : provides
+ApiClientImpl --> UserAPI : provides
+ApiClientImpl --> TariffAPI : provides
+ApiClientImpl --> CheckoutAPI : provides
+
+ApiClientImpl --> ReqInt : registers
+ApiClientImpl --> ResInt : registers
+
+ReqInt --> Storage : reads tokens
+ResInt --> Storage : writes tokens
+ResInt --> AuthAPI : calls refresh
+ResInt --> Normalizer : uses
+
+AuthAPI --> ReqTypes : uses
+UserAPI --> ReqTypes : uses
+TariffAPI --> ReqTypes : uses
+CheckoutAPI --> ReqTypes : uses
+
+AuthAPI --> ResTypes : returns
+UserAPI --> ResTypes : returns
+TariffAPI --> ResTypes : returns
+CheckoutAPI --> ResTypes : returns
+
+' Usage
+package "Stores" {
+    [wizardStore] as WStore
+    [userStore] as UStore
+    [authStore] as AStore
+}
+
+WStore ..> IApiClient : uses
+UStore ..> IApiClient : uses
+AStore ..> IApiClient : uses
+
+note right of IApiClient
+  Type-safe API client interface.
+  All endpoint methods are fully
+  typed with request and response
+  types.
+
+  Example:
+  api.auth.login(email, password)
+    : Promise<AuthResponse>
+end note
+
+note bottom of ReqInt
+  **Request Flow:**
+  1. Get token from LocalStorage
+  2. Add Bearer token to headers
+  3. Add common headers
+  4. Pass to Axios
+end note
+
+note bottom of ResInt
+  **Response Flow:**
+  1. Extract data from response
+  2. If 401 and not retry:
+     - Call refresh token
+     - Retry original request
+  3. If refresh fails:
+     - Clear tokens
+     - Redirect to login
+  4. Normalize errors
+end note
+
+note right of Normalizer
+  Converts different error types
+  to consistent format:
+
+  {
+    message: string
+    code: string
+    status: number
+    field?: string
+  }
+end note
+
+@enduml

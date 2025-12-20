@@ -1,0 +1,154 @@
+@startuml wizard-flow
+!theme plain
+title User Journey - Wizard Flow
+
+skinparam activityBackgroundColor #E3F2FD
+skinparam activityBorderColor #1976D2
+skinparam activityDiamondBackgroundColor #FFF3E0
+skinparam activityDiamondBorderColor #F57C00
+
+|User|
+start
+:Navigate to /wizard;
+
+|Frontend|
+:Display Step 1: File Upload;
+
+|User|
+:Upload images\n(drag & drop or browse);
+:Optionally add description;
+
+|Frontend|
+:Validate files\n(type, size, count);
+
+if (Valid files?) then (no)
+  :Show validation errors;
+  |User|
+  :Fix errors;
+  |Frontend|
+else (yes)
+  :Enable "Next" button;
+  |User|
+  :Click "Next";
+  |Frontend|
+  :Save to WizardStore\n(step1Data);
+  :Display Step 2: GDPR & Email;
+endif
+
+|User|
+:Enter email address;
+:Check GDPR consent;
+
+|Frontend|
+:Validate email format;
+:Validate consent checked;
+
+if (Valid email & consent?) then (no)
+  :Show validation errors;
+  |User|
+  :Fix errors;
+  |Frontend|
+else (yes)
+  :Enable "Next" button;
+  |User|
+  :Click "Next";
+  |Frontend|
+  :Save to WizardStore\n(step2Data);
+  :Display Step 3: Plans;
+endif
+
+|Frontend|
+:Load tariff plans\nfrom API;
+
+|Backend API|
+:Return active plans;
+
+|Frontend|
+:Display plan cards\nwith features;
+
+|User|
+:Compare plans;
+:Select plan;
+
+|Frontend|
+:Highlight selected plan;
+:Enable "Next" button;
+
+|User|
+:Click "Next";
+
+|Frontend|
+:Save to WizardStore\n(step3Data);
+:Display Step 4: Checkout;
+
+|User|
+:Fill billing info\n(name, address);
+:Select payment method\n(Stripe/PayPal);
+:Click "Proceed to Payment";
+
+|Frontend|
+:Validate billing info;
+
+if (Valid billing info?) then (no)
+  :Show validation errors;
+  |User|
+  :Fix errors;
+  |Frontend|
+else (yes)
+  :Call checkout API;
+  |Backend API|
+  :Create checkout session;
+  :Create subscription (inactive);
+  :Create invoice;
+  :Return checkout URL;
+  |Frontend|
+  :Redirect to payment provider;
+endif
+
+|Payment Provider|
+:Show payment form;
+
+|User|
+:Complete payment;
+
+|Payment Provider|
+:Process payment;
+:Send webhook to backend;
+
+|Backend API|
+:Verify payment;
+:Activate subscription;
+:Mark invoice as paid;
+:Send confirmation email;
+:Redirect to success page;
+
+|Frontend|
+:Show success message;
+:Redirect to user cabinet;
+
+|User|
+:View active subscription;
+
+stop
+
+note right
+  **Frontend State**
+
+  All state managed by
+  WizardStore (Pinia)
+
+  Navigation tracked:
+  currentStep: 1-4
+  progress: 0-100%
+end note
+
+note right
+  **Backend Events**
+
+  Event-driven:
+  1. InvoiceCreated event
+  2. PaymentCompleted event
+  3. SubscriptionActivated event
+end note
+
+@enduml

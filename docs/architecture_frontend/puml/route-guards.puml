@@ -1,0 +1,131 @@
+@startuml route-guards
+!theme plain
+title Route Guard Flow - Authentication & Authorization
+
+|User|
+start
+:Navigate to /cabinet/profile;
+
+|Router|
+:Trigger navigation;
+
+partition "Router Guards" {
+
+    |authGuard|
+    :Check route meta.requiresAuth;
+
+    if (requiresAuth?) then (yes)
+        :Check isAuthenticated;
+
+        if (Authenticated?) then (no)
+            :Save redirect URL;
+            :Redirect to /login;
+            |User|
+            stop
+        else (yes)
+            :Continue;
+        endif
+    else (no)
+        :Continue;
+    endif
+
+    |planGuard|
+    :Check route meta.requiredPlan;
+
+    if (requiredPlan?) then (yes)
+        :Get user's subscriptions;
+
+        |API|
+        :Return subscriptions;
+
+        |planGuard|
+        :Filter active subscriptions;
+        :Check if plan matches;
+
+        if (Has access?) then (no)
+            :Save redirect URL;
+            :Redirect to /upgrade;
+            |User|
+            :See upgrade prompt;
+            stop
+        else (yes)
+            :Continue;
+        endif
+    else (no)
+        :Continue;
+    endif
+
+    |permissionGuard|
+    :Check route meta.permissions;
+
+    if (permissions?) then (yes)
+        :Get user role;
+        :Check permissions;
+
+        if (Has permission?) then (no)
+            :Redirect to /forbidden;
+            |User|
+            stop
+        else (yes)
+            :Continue;
+        endif
+    else (no)
+        :Continue;
+    endif
+}
+
+|Router|
+:Render component;
+
+|User|
+:View page;
+stop
+
+note right
+  **Authentication Guard**
+
+  Routes with requiresAuth: true
+  must have authenticated user.
+
+  Example:
+  {
+    path: '/cabinet',
+    meta: { requiresAuth: true }
+  }
+end note
+
+note right
+  **Plan Access Guard**
+
+  Routes with requiredPlan check
+  if user has active subscription
+  to specified plans.
+
+  Example:
+  {
+    path: '/premium-feature',
+    meta: {
+      requiresAuth: true,
+      requiredPlan: ['premium', 'enterprise']
+    }
+  }
+end note
+
+note right
+  **Permission Guard**
+
+  Routes with permissions check
+  if user has specific permission
+  or role.
+
+  Example:
+  {
+    path: '/admin/users',
+    meta: {
+      requiresAuth: true,
+      permissions: ['admin']
+    }
+  }
+end note
+
+@enduml

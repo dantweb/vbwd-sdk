@@ -1,0 +1,85 @@
+@startuml admin-layout-structure
+!theme plain
+title Admin Application - Layout Structure
+
+skinparam componentStyle rectangle
+
+component "App.vue" as App
+
+package "Router (/admin)" {
+    [Login View] as Login
+    [Forbidden View] as Forbidden
+
+    package "Admin Layout" {
+        [AdminLayout.vue] as Layout
+
+        package "Topbar" {
+            [AdminTopbar.vue] as Topbar
+        }
+
+        package "Sidebar" {
+            [AdminSidebar.vue] as Sidebar
+        }
+
+        [router-view] as RouterView
+    }
+}
+
+App --> Login : /admin/login
+App --> Forbidden : /admin/forbidden
+App --> Layout : /admin/* (protected)
+
+Layout --> Topbar
+Layout --> Sidebar
+Layout --> RouterView
+
+package "Admin Views" {
+    [Dashboard.vue] as Dashboard
+    [Users/UserList.vue] as UserList
+    [Users/UserDetails.vue] as UserDetails
+    [Plans/PlanList.vue] as PlanList
+    [Analytics/Dashboard.vue] as Analytics
+}
+
+RouterView --> Dashboard : /admin/
+RouterView --> UserList : /admin/users
+RouterView --> UserDetails : /admin/users/:id
+RouterView --> PlanList : /admin/plans
+RouterView --> Analytics : /admin/analytics
+
+note right of Layout
+  **AdminLayout Structure**
+
+  ┌────────────────────────────────┐
+  │ Topbar                         │
+  ├────────┬───────────────────────┤
+  │        │                       │
+  │ Side-  │  Main Content         │
+  │ bar    │  <router-view />      │
+  │        │                       │
+  │        │                       │
+  └────────┴───────────────────────┘
+end note
+
+note bottom of Sidebar
+  Navigation items dynamically
+  highlight based on current route.
+
+  Each item links to plugin routes:
+  - Dashboard → /admin/
+  - Users → /admin/users
+  - Plans → /admin/plans
+  etc.
+end note
+
+note left of Topbar
+  Topbar components:
+  1. Branding/Title
+  2. Global search
+  3. Notifications (future)
+  4. User dropdown
+     - Logout
+     - Profile (future)
+end note
+
+@enduml

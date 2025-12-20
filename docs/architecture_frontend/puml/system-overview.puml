@@ -1,0 +1,167 @@
+@startuml system-overview
+!theme plain
+title VBWD Frontend - System Overview
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+actor User
+
+package "Browser" {
+
+    package "Vue.js Application" #E3F2FD {
+        component "App Shell" as Shell
+        component "Vue Router" as Router
+        component "Pinia Stores" as Pinia
+    }
+
+    package "Core SDK" #E8F5E9 {
+        component "Plugin System" as PluginSys
+        component "API Client" as APIClient
+        component "Auth Service" as AuthSvc
+        component "Event Bus" as EventBus
+        component "Validation" as Validation
+    }
+
+    package "Plugins" #FFF3E0 {
+        component "Wizard Plugin" as Wizard
+        component "User Cabinet" as Cabinet
+        component "Admin Plugin" as Admin
+    }
+
+    package "UI Layer" #F3E5F5 {
+        component "Tailwind CSS" as Tailwind
+        component "Components" as Components
+    }
+
+    package "Testing" #E1F5FE {
+        component "Playwright" as Playwright
+        component "Vitest" as Vitest
+    }
+}
+
+package "Backend API" #FFEBEE {
+    component "Flask API" as Flask
+    database "MySQL" as DB
+}
+
+package "External Services" #FFF9C4 {
+    component "Stripe" as Stripe
+    component "PayPal" as PayPal
+}
+
+' User interactions
+User --> Shell : interacts
+
+' Core connections
+Shell --> Router
+Shell --> Pinia
+Shell --> PluginSys
+
+Router --> Wizard
+Router --> Cabinet
+Router --> Admin
+
+PluginSys --> Wizard : loads
+PluginSys --> Cabinet : loads
+PluginSys --> Admin : loads
+
+Wizard --> APIClient : uses
+Wizard --> AuthSvc : uses
+Wizard --> EventBus : uses
+Wizard --> Validation : uses
+
+Cabinet --> APIClient : uses
+Cabinet --> AuthSvc : uses
+
+Admin --> APIClient : uses
+Admin --> AuthSvc : uses
+
+' UI layer
+Wizard --> Components : uses
+Cabinet --> Components : uses
+Admin --> Components : uses
+
+Components --> Tailwind : styled with
+
+' Testing
+Playwright --> Shell : tests
+Vitest --> PluginSys : tests
+Vitest --> APIClient : tests
+Vitest --> Pinia : tests
+
+' Backend communication
+APIClient --> Flask : HTTP/HTTPS
+
+Flask --> DB : queries
+Flask --> Stripe : creates sessions
+Flask --> PayPal : creates orders
+
+Stripe --> Flask : webhooks
+PayPal --> Flask : webhooks
+
+' Deployment
+package "CI/CD" #E8EAF6 {
+    component "GitHub Actions" as CI
+}
+
+Vitest --> CI : runs in
+Playwright --> CI : runs in
+
+package "Hosting" #C8E6C9 {
+    component "Static Hosting" as Hosting
+}
+
+Shell --> Hosting : deployed to
+
+note right of PluginSys
+  **Plugin Architecture**
+
+  Plugins are self-contained:
+  - Routes
+  - Components
+  - Stores
+  - Logic
+
+  Plugins can be:
+  - Loaded dynamically
+  - Enabled/disabled
+  - Versioned
+  - Independently tested
+end note
+
+note bottom of APIClient
+  **API Communication**
+
+  All backend communication
+  goes through type-safe
+  API client with:
+  - Automatic auth headers
+  - Token refresh
+  - Error handling
+  - Request/response typing
+end note
+
+note right of Wizard
+  **First Plugin: Wizard**
+
+  Complete subscription flow:
+  1. Upload images
+  2. GDPR consent
+  3. Select plan
+  4. Checkout
+  5. Payment
+  6. Account creation
+end note
+
+note left of Cabinet
+  **User Cabinet**
+
+  Self-service portal:
+  - View/edit profile
+  - Manage subscriptions
+  - View invoices
+  - Change password
+end note
+
+@enduml
