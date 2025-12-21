@@ -22,16 +22,19 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./python:/app
+      - ./python/api:/app
       - ./data/python/logs:/app/logs
     environment:
       - FLASK_ENV=development
       - DATABASE_URL=postgresql://vbwd:vbwd@postgres:5432/vbwd
+      - REDIS_URL=redis://redis:6379/0
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-dev-secret-key}
       - LOOPAI_API_URL=${LOOPAI_API_URL:-http://loopai-web:5000}
       - LOOPAI_API_KEY=${LOOPAI_API_KEY:-}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - vbwd-network
@@ -41,7 +44,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./container/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-vbwd}
@@ -58,6 +61,68 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - vbwd-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - vbwd-network
+
+  celery-worker:
+    build:
+      context: ./python
+      dockerfile: ../container/python/Dockerfile
+    command: celery -A src.celery_app worker --loglevel=info
+    volumes:
+      - ./python/api:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://vbwd:vbwd@postgres:5432/vbwd
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - vbwd-network
+
+  celery-beat:
+    build:
+      context: ./python
+      dockerfile: ../container/python/Dockerfile
+    command: celery -A src.celery_app beat --loglevel=info
+    volumes:
+      - ./python/api:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - vbwd-network
+
+  celery-flower:
+    build:
+      context: ./python
+      dockerfile: ../container/python/Dockerfile
+    command: celery -A src.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./python/api:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - celery-worker
     networks:
       - vbwd-network
 
@@ -78,3 +143,9 @@ services:
 networks:
   vbwd-network:
     driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

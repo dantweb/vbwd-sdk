@@ -1,50 +1,44 @@
+"""Pytest configuration and fixtures."""
 import pytest
+import sys
 import os
 
-# Set test environment BEFORE importing app
-os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+# Add src to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+
+# Set test environment
+os.environ['FLASK_ENV'] = 'testing'
 os.environ['TESTING'] = 'true'
 
-from src import create_app, db
 
-
-@pytest.fixture(scope='function')
+@pytest.fixture
 def app():
     """Create application for testing."""
-    app = create_app('testing')
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-    app.config['TESTING'] = True
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    from src.app import create_app
 
-    with app.app_context():
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
+    app = create_app({"TESTING": True})
+    yield app
 
 
 @pytest.fixture
 def client(app):
-    """Test client for making requests."""
+    """Create test client."""
     return app.test_client()
 
 
 @pytest.fixture
-def db_session(app):
-    """Database session for tests."""
-    with app.app_context():
-        yield db.session
-        db.session.rollback()
+def runner(app):
+    """Create test CLI runner."""
+    return app.test_cli_runner()
 
 
-@pytest.fixture
-def sample_submission_data():
-    """Sample valid submission data."""
-    return {
-        'email': 'test@example.com',
-        'consent': True,
-        'images': [
-            {'type': 'image/jpeg', 'size': 1000, 'data': 'base64data...'}
-        ],
-        'comments': 'Test submission'
-    }
+# Database fixtures (Sprint 1)
+# @pytest.fixture
+# def db_session(app):
+#     """Database session for tests."""
+#     from src.extensions import db
+#     with app.app_context():
+#         db.create_all()
+#         yield db.session
+#         db.session.rollback()
+#         db.drop_all()

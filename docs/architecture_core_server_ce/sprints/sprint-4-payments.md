@@ -13,6 +13,9 @@
 ## Objectives
 
 - [ ] General-purpose plugin system (IPlugin, PluginManager, PluginRegistry)
+- [ ] **Plugin lifecycle**: Singletons (thread-safe, connection pooling)
+- [ ] **EventDispatcher** with sequential handler execution (replaces EventBus)
+- [ ] **Idempotency key middleware** (prevent duplicate payments)
 - [ ] Payment component built on plugin system
 - [ ] InvoiceService with tax breakdown
 - [ ] PaymentProviderAdapter interface and implementations
@@ -443,6 +446,339 @@ class PluginRegistry:
     def get_components_by_type(self, component_type: str) -> List[IComponent]:
         """Get all components of a given type."""
         return list(self._components.get(component_type, {}).values())
+```
+
+---
+
+### 4.0.1 Plugin Lifecycle: Singletons and Thread Safety
+
+**CRITICAL**: Payment plugins are registered as **singletons** (one instance shared across all requests) for connection pooling and efficiency.
+
+#### Requirements:
+
+1. **Thread-Safe Implementation**: Plugins must be stateless or use thread-safe state management
+2. **Connection Pooling**: External API clients (Stripe, PayPal) handle concurrency internally
+3. **No Mutable Shared State**: Instance variables should be immutable or protected
+
+**File:** `python/api/src/container.py`
+
+```python
+"""Dependency injection container with singleton plugins."""
+from dependency_injector import containers, providers
+from src.plugins import PluginManager
+from src.plugins.payment import StripePlugin, PayPalPlugin, ManualPaymentPlugin
+
+
+class Container(containers.DeclarativeContainer):
+    """DI container for application services."""
+
+    config = providers.Configuration()
+
+    # Plugin Manager (singleton)
+    plugin_manager = providers.Singleton(PluginManager)
+
+    # Payment Plugins (singletons - thread-safe)
+    stripe_plugin = providers.Singleton(
+        StripePlugin,
+        api_key=config.stripe.api_key,
+    )
+
+    paypal_plugin = providers.Singleton(
+        PayPalPlugin,
+        client_id=config.paypal.client_id,
+        client_secret=config.paypal.client_secret,
+    )
+
+    manual_payment_plugin = providers.Singleton(
+        ManualPaymentPlugin,
+    )
+```
+
+**Plugin Thread-Safety Example:**
+
+**File:** `python/api/src/plugins/payment/stripe_plugin.py`
+
+```python
+"""Stripe payment plugin (thread-safe singleton)."""
+import stripe
+from typing import Dict, Any
+from src.plugins import IPlugin
+from src.plugins.payment import IPaymentProviderAdapter
+
+
+class StripePlugin(IPlugin, IPaymentProviderAdapter):
+    """
+    Stripe payment plugin.
+
+    Thread-safe singleton - Stripe client handles concurrency internally.
+    """
+
+    def __init__(self, api_key: str):
+        """
+        Initialize Stripe plugin.
+
+        Args:
+            api_key: Stripe API key (immutable)
+        """
+        # Immutable configuration (thread-safe)
+        self._api_key = api_key
+
+        # Stripe client is thread-safe
+        self._client = stripe.StripeClient(api_key=api_key)
+
+    @property
+    def name(self) -> str:
+        return "stripe"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def description(self) -> str:
+        return "Stripe payment provider"
+
+    def initialize(self, config: Dict[str, Any]) -> None:
+        """Initialize (no mutable state)."""
+        pass
+
+    def activate(self) -> None:
+        """Activate plugin."""
+        pass
+
+    def deactivate(self) -> None:
+        """Deactivate plugin."""
+        pass
+
+    def create_payment_intent(
+        self,
+        amount: int,
+        currency: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Create payment intent (thread-safe).
+
+        No mutable instance state - safe for concurrent calls.
+        """
+        # Thread-safe: Stripe client handles concurrency
+        payment_intent = self._client.payment_intents.create(
+            amount=amount,
+            currency=currency,
+            metadata=metadata,
+        )
+        return payment_intent
+```
+
+---
+
+### 4.0.2 Idempotency Key Middleware
+
+**CRITICAL**: Payment operations require idempotency keys to prevent duplicate charges when requests are retried.
+
+**File:** `python/api/src/middleware/idempotency.py`
+
+```python
+"""Idempotency key middleware for payment operations."""
+from functools import wraps
+from flask import request, jsonify, g
+from src.utils.redis_client import redis_client
+import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def require_idempotency_key(f):
+    """
+    Decorator requiring Idempotency-Key header for payment operations.
+
+    Usage:
+        @app.route('/api/subscriptions/<int:id>/activate', methods=['POST'])
+        @require_idempotency_key
+        def activate_subscription(id):
+            # Your logic here
+            ...
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check for idempotency key
+        idempotency_key = request.headers.get('Idempotency-Key')
+
+        if not idempotency_key:
+            return jsonify({
+                "error": "Missing Idempotency-Key header",
+                "message": "Payment operations require an Idempotency-Key header"
+            }), 400
+
+        # Check if we've seen this key before
+        cached_response = redis_client.get_idempotency_key(idempotency_key)
+
+        if cached_response:
+            # Return cached response
+            logger.info(f"Idempotency key hit: {idempotency_key}")
+            return jsonify(json.loads(cached_response)), 200
+
+        # Store key in request context for later caching
+        g.idempotency_key = idempotency_key
+
+        # Execute the function
+        response = f(*args, **kwargs)
+
+        # Cache successful response (only 2xx status codes)
+        if isinstance(response, tuple):
+            data, status_code = response
+        else:
+            data = response
+            status_code = 200
+
+        if 200 <= status_code < 300:
+            redis_client.set_idempotency_key(
+                idempotency_key,
+                json.dumps(data.get_json() if hasattr(data, 'get_json') else data),
+                ttl=86400,  # 24 hours
+            )
+            logger.info(f"Cached response for idempotency key: {idempotency_key}")
+
+        return response
+
+    return decorated_function
+```
+
+**Usage in Routes:**
+
+**File:** `python/api/src/routes/subscriptions.py`
+
+```python
+"""Subscription routes with idempotency."""
+from flask import Blueprint, request, jsonify
+from src.middleware.idempotency import require_idempotency_key
+from src.services import SubscriptionService
+
+bp = Blueprint('subscriptions', __name__)
+
+
+@bp.route('/api/subscriptions/<int:subscription_id>/activate', methods=['POST'])
+@require_idempotency_key  # Prevents duplicate activation
+def activate_subscription(subscription_id: int):
+    """
+    Activate subscription with payment.
+
+    Requires: Idempotency-Key header
+    """
+    subscription_service = get_service(SubscriptionService)
+
+    try:
+        result = subscription_service.activate(subscription_id)
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@bp.route('/api/invoices/<int:invoice_id>/pay', methods=['POST'])
+@require_idempotency_key  # Prevents double payment
+def pay_invoice(invoice_id: int):
+    """
+    Pay invoice.
+
+    Requires: Idempotency-Key header
+    """
+    invoice_service = get_service(InvoiceService)
+
+    payment_method = request.json.get('payment_method')
+
+    try:
+        result = invoice_service.process_payment(
+            invoice_id=invoice_id,
+            payment_method=payment_method,
+        )
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+```
+
+**Test Idempotency:**
+
+**File:** `python/api/tests/integration/test_idempotency.py`
+
+```python
+"""Tests for idempotency middleware."""
+import pytest
+from flask import Flask
+import json
+
+
+class TestIdempotencyMiddleware:
+    """Test idempotency key handling."""
+
+    def test_missing_idempotency_key_returns_400(self, client):
+        """Missing idempotency key should return 400."""
+        response = client.post('/api/subscriptions/1/activate')
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'Idempotency-Key' in data['error']
+
+    def test_duplicate_request_returns_cached_response(self, client):
+        """Duplicate requests with same key return cached response."""
+        headers = {'Idempotency-Key': 'test-key-123'}
+
+        # First request
+        response1 = client.post(
+            '/api/subscriptions/1/activate',
+            headers=headers,
+            json={'payment_method': 'stripe'},
+        )
+        assert response1.status_code == 200
+        data1 = response1.get_json()
+
+        # Second request (should return cached)
+        response2 = client.post(
+            '/api/subscriptions/1/activate',
+            headers=headers,
+            json={'payment_method': 'stripe'},
+        )
+        assert response2.status_code == 200
+        data2 = response2.get_json()
+
+        # Responses should be identical
+        assert data1 == data2
+
+    def test_different_keys_execute_independently(self, client):
+        """Different idempotency keys execute independently."""
+        response1 = client.post(
+            '/api/subscriptions/1/activate',
+            headers={'Idempotency-Key': 'key-1'},
+            json={'payment_method': 'stripe'},
+        )
+
+        response2 = client.post(
+            '/api/subscriptions/2/activate',
+            headers={'Idempotency-Key': 'key-2'},
+            json={'payment_method': 'stripe'},
+        )
+
+        # Both should execute successfully
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+
+    def test_failed_requests_not_cached(self, client):
+        """Failed requests (4xx/5xx) should not be cached."""
+        headers = {'Idempotency-Key': 'fail-key-123'}
+
+        # First request (fails)
+        response1 = client.post(
+            '/api/subscriptions/999/activate',  # Non-existent
+            headers=headers,
+        )
+        assert response1.status_code == 404
+
+        # Second request should also execute (not cached)
+        response2 = client.post(
+            '/api/subscriptions/999/activate',
+            headers=headers,
+        )
+        assert response2.status_code == 404
 ```
 
 ---
@@ -1581,16 +1917,18 @@ class ManualPaymentPlugin(IPlugin):
 
 ---
 
-### 4.6 Event-Driven Architecture
+### 4.6 Event-Driven Architecture with EventDispatcher
 
-The payment system uses an event-driven architecture where services react to events through handlers.
+**IMPORTANT**: Sprint 4 uses EventDispatcher with **sequential execution** (handlers execute one by one in registration order). This ensures predictable ordering and easier debugging for payment-critical events.
+
+The payment system uses an event-driven architecture where services react to domain events through handlers.
 
 **File:** `python/api/src/events/__init__.py`
 
 ```python
 """Event system exports."""
-from .bus import EventBus
-from .interfaces import IEvent, IEventHandler
+from .dispatcher import EventDispatcher
+from .interfaces import DomainEvent, IEventHandler
 from .payment_events import (
     PaymentCompletedEvent,
     PaymentFailedEvent,
@@ -1599,8 +1937,8 @@ from .payment_events import (
 )
 
 __all__ = [
-    "EventBus",
-    "IEvent",
+    "EventDispatcher",
+    "DomainEvent",
     "IEventHandler",
     "PaymentCompletedEvent",
     "PaymentFailedEvent",
@@ -1616,81 +1954,145 @@ __all__ = [
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Type
 import uuid
 
 
 @dataclass
-class IEvent(ABC):
-    """Base event interface."""
+class DomainEvent(ABC):
+    """
+    Base domain event.
+
+    All domain events should inherit from this class.
+    """
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=datetime.utcnow)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
     @abstractmethod
-    def event_type(self) -> str:
-        """Event type identifier."""
+    def event_name(self) -> str:
+        """Event name identifier."""
         pass
 
 
 class IEventHandler(ABC):
-    """Event handler interface."""
+    """
+    Event handler interface.
 
-    @property
+    Handlers execute sequentially in registration order.
+    """
+
     @abstractmethod
-    def handles(self) -> list:
-        """List of event types this handler processes."""
+    def handle(self, event: DomainEvent) -> None:
+        """
+        Handle the event synchronously.
+
+        Args:
+            event: The domain event to handle.
+        """
         pass
 
     @abstractmethod
-    async def handle(self, event: IEvent) -> None:
-        """Handle the event."""
+    def can_handle(self, event: DomainEvent) -> bool:
+        """
+        Check if this handler can handle the event.
+
+        Args:
+            event: The domain event to check.
+
+        Returns:
+            True if handler can process this event.
+        """
         pass
 ```
 
-**File:** `python/api/src/events/bus.py`
+**File:** `python/api/src/events/dispatcher.py`
 
 ```python
-"""Event bus implementation."""
+"""Event dispatcher with sequential execution."""
 from typing import Dict, List, Type
-from .interfaces import IEvent, IEventHandler
+from .interfaces import DomainEvent, IEventHandler
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-class EventBus:
+class EventDispatcher:
     """
-    Central event bus for publishing and subscribing to events.
+    Event dispatcher with sequential handler execution.
 
-    Supports both sync and async handlers.
+    Handlers execute one by one in registration order for
+    predictable behavior and easier debugging.
     """
 
     def __init__(self):
-        self._handlers: Dict[str, List[IEventHandler]] = {}
+        self._handlers: Dict[Type[DomainEvent], List[IEventHandler]] = {}
 
-    def subscribe(self, handler: IEventHandler) -> None:
-        """Subscribe handler to events it handles."""
-        for event_type in handler.handles:
-            if event_type not in self._handlers:
-                self._handlers[event_type] = []
-            self._handlers[event_type].append(handler)
+    def subscribe(
+        self,
+        event_type: Type[DomainEvent],
+        handler: IEventHandler,
+    ) -> None:
+        """
+        Subscribe handler to event type.
 
-    def unsubscribe(self, handler: IEventHandler) -> None:
-        """Unsubscribe handler from all events."""
-        for event_type in handler.handles:
-            if event_type in self._handlers:
-                self._handlers[event_type].remove(handler)
+        Args:
+            event_type: Domain event class
+            handler: Event handler instance
+        """
+        if event_type not in self._handlers:
+            self._handlers[event_type] = []
+        self._handlers[event_type].append(handler)
+        logger.debug(
+            f"Registered handler {handler.__class__.__name__} "
+            f"for event {event_type.__name__}"
+        )
 
-    async def publish(self, event: IEvent) -> None:
-        """Publish event to all subscribed handlers."""
-        handlers = self._handlers.get(event.event_type, [])
+    def dispatch(self, event: DomainEvent) -> None:
+        """
+        Dispatch event to all subscribed handlers sequentially.
+
+        Handlers execute in registration order.
+        If a handler raises an exception, execution stops.
+
+        Args:
+            event: Domain event to dispatch
+        """
+        event_type = type(event)
+        handlers = self._handlers.get(event_type, [])
+
+        logger.info(
+            f"Dispatching {event_type.__name__} to {len(handlers)} handler(s)"
+        )
+
         for handler in handlers:
-            await handler.handle(event)
+            if handler.can_handle(event):
+                try:
+                    logger.debug(
+                        f"Executing handler {handler.__class__.__name__}"
+                    )
+                    handler.handle(event)
+                except Exception as e:
+                    logger.error(
+                        f"Handler {handler.__class__.__name__} failed: {e}",
+                        exc_info=True,
+                    )
+                    # Stop on first failure for payment-critical events
+                    raise
 
-    def publish_sync(self, event: IEvent) -> None:
-        """Publish event synchronously."""
-        import asyncio
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.publish(event))
+    def unsubscribe(
+        self,
+        event_type: Type[DomainEvent],
+        handler: IEventHandler,
+    ) -> None:
+        """Unsubscribe handler from event type."""
+        if event_type in self._handlers:
+            self._handlers[event_type].remove(handler)
+
+    def clear(self) -> None:
+        """Clear all subscriptions (for testing)."""
+        self._handlers.clear()
 ```
 
 **File:** `python/api/src/events/payment_events.py`

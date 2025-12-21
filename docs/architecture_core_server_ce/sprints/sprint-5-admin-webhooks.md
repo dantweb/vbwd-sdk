@@ -648,52 +648,256 @@ def check_invoices_expiration(app, invoice_service):
         return count
 ```
 
-**File:** `python/api/src/jobs/scheduler.py`
+**File:** `python/api/requirements.txt` (add Celery)
+
+```txt
+# Existing dependencies...
+celery[redis]==5.3.4  # Distributed task queue
+redis==5.0.1  # Message broker (from Sprint 1)
+```
+
+**File:** `python/api/src/celery_app.py`
 
 ```python
-"""Job scheduler setup."""
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
-from src.jobs.expiration_check import (
-    check_subscriptions_expiration,
-    check_invoices_expiration,
+"""Celery application for distributed background jobs."""
+from celery import Celery
+from celery.schedules import crontab
+from src.config import get_redis_url
+
+# Create Celery instance with Redis broker
+celery_app = Celery(
+    'vbwd',
+    broker=get_redis_url(),  # Redis as message broker
+    backend=get_redis_url(),  # Redis as result backend
 )
 
+# Celery configuration
+celery_app.conf.update(
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='UTC',
+    enable_utc=True,
+    task_track_started=True,
+    task_acks_late=True,  # Acknowledge after completion
+    worker_prefetch_multiplier=1,  # One task at a time per worker
+    broker_connection_retry_on_startup=True,
+)
 
-def setup_scheduler(app, container):
+# Periodic task schedule
+celery_app.conf.beat_schedule = {
+    'check-subscriptions-expiration': {
+        'task': 'src.jobs.expiration_check.check_subscriptions_expiration',
+        'schedule': crontab(minute=0),  # Every hour
+    },
+    'check-invoices-expiration': {
+        'task': 'src.jobs.expiration_check.check_invoices_expiration',
+        'schedule': crontab(minute=0),  # Every hour
+    },
+    'generate-recurring-invoices': {
+        'task': 'src.jobs.invoice_generation.generate_recurring_invoices',
+        'schedule': crontab(hour=2, minute=0),  # Daily at 2 AM
+    },
+}
+```
+
+**File:** `python/api/src/jobs/expiration_check.py` (updated for Celery)
+
+```python
+"""Expiration check jobs (Celery tasks)."""
+from src.celery_app import celery_app
+from src.container import Container
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@celery_app.task(name='src.jobs.expiration_check.check_subscriptions_expiration')
+def check_subscriptions_expiration():
     """
-    Setup background job scheduler.
+    Celery task: Check and expire subscriptions.
 
-    Runs expiration checks every hour.
+    Runs every hour via Celery Beat scheduler.
     """
-    scheduler = BackgroundScheduler()
+    container = Container()
+    subscription_service = container.subscription_service()
 
-    # Subscription expiration check - every hour
-    scheduler.add_job(
-        func=lambda: check_subscriptions_expiration(
-            app,
-            container.subscription_service(),
-        ),
-        trigger=IntervalTrigger(hours=1),
-        id="subscription_expiration",
-        name="Check subscription expirations",
-        replace_existing=True,
-    )
+    try:
+        count = subscription_service.expire_subscriptions()
+        logger.info(f"[{datetime.utcnow()}] Expired {count} subscriptions")
+        return {"expired": count, "status": "success"}
+    except Exception as e:
+        logger.error(f"Subscription expiration check failed: {e}")
+        raise
 
-    # Invoice expiration check - every hour
-    scheduler.add_job(
-        func=lambda: check_invoices_expiration(
-            app,
-            container.invoice_service(),
-        ),
-        trigger=IntervalTrigger(hours=1),
-        id="invoice_expiration",
-        name="Check invoice expirations",
-        replace_existing=True,
-    )
 
-    scheduler.start()
-    return scheduler
+@celery_app.task(name='src.jobs.expiration_check.check_invoices_expiration')
+def check_invoices_expiration():
+    """
+    Celery task: Check and expire pending invoices.
+
+    Runs every hour via Celery Beat scheduler.
+    """
+    container = Container()
+    invoice_service = container.invoice_service()
+
+    try:
+        count = invoice_service.expire_pending_invoices()
+        logger.info(f"[{datetime.utcnow()}] Expired {count} invoices")
+        return {"expired": count, "status": "success"}
+    except Exception as e:
+        logger.error(f"Invoice expiration check failed: {e}")
+        raise
+```
+
+**File:** `python/api/src/jobs/invoice_generation.py` (new)
+
+```python
+"""Invoice generation jobs (Celery tasks)."""
+from src.celery_app import celery_app
+from src.container import Container
+from src.utils.redis_client import redis_client
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@celery_app.task(name='src.jobs.invoice_generation.generate_recurring_invoices')
+def generate_recurring_invoices():
+    """
+    Celery task: Generate recurring invoices for active subscriptions.
+
+    Runs daily at 2 AM via Celery Beat scheduler.
+    Uses distributed lock to prevent duplicate execution.
+    """
+    lock_key = "generate_recurring_invoices"
+
+    # Acquire distributed lock
+    with redis_client.lock(lock_key, timeout=300):  # 5 minute lock
+        container = Container()
+        invoice_service = container.invoice_service()
+
+        try:
+            count = invoice_service.generate_recurring_invoices()
+            logger.info(f"[{datetime.utcnow()}] Generated {count} recurring invoices")
+            return {"generated": count, "status": "success"}
+        except Exception as e:
+            logger.error(f"Recurring invoice generation failed: {e}")
+            raise
+
+
+@celery_app.task(name='src.jobs.invoice_generation.generate_invoice_for_user')
+def generate_invoice_for_user(user_id: int):
+    """
+    Celery task: Generate invoice for specific user.
+
+    Can be triggered manually or by subscription activation.
+    Uses distributed lock per user.
+    """
+    lock_key = f"generate_invoice:user_{user_id}"
+
+    # Acquire distributed lock for this user
+    with redis_client.lock(lock_key, timeout=60):
+        container = Container()
+        invoice_service = container.invoice_service()
+
+        try:
+            invoice = invoice_service.generate_invoice_for_user(user_id)
+            logger.info(f"Generated invoice {invoice.id} for user {user_id}")
+            return {
+                "invoice_id": invoice.id,
+                "user_id": user_id,
+                "status": "success"
+            }
+        except Exception as e:
+            logger.error(f"Invoice generation failed for user {user_id}: {e}")
+            raise
+```
+
+**Running Celery Workers:**
+
+**File:** `docker-compose.yaml` (add Celery services)
+
+```yaml
+services:
+  # ... existing services ...
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: container/python/Dockerfile
+    container_name: vbwd_celery_worker
+    command: celery -A src.celery_app worker --loglevel=info
+    volumes:
+      - ./python/api:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://vbwd_user:vbwd_password@postgres:5432/vbwd_db
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - vbwd_network
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: container/python/Dockerfile
+    container_name: vbwd_celery_beat
+    command: celery -A src.celery_app beat --loglevel=info
+    volumes:
+      - ./python/api:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - vbwd_network
+
+  celery-flower:
+    build:
+      context: .
+      dockerfile: container/python/Dockerfile
+    container_name: vbwd_celery_flower
+    command: celery -A src.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./python/api:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - celery-worker
+    networks:
+      - vbwd_network
+```
+
+**Commands:**
+
+```bash
+# Start all services (including Celery workers)
+docker-compose up -d
+
+# View Celery worker logs
+docker-compose logs -f celery-worker
+
+# View Celery beat (scheduler) logs
+docker-compose logs -f celery-beat
+
+# Access Flower (Celery monitoring UI)
+open http://localhost:5555
+
+# Manually trigger a task (for testing)
+docker-compose exec python python -c "
+from src.jobs.expiration_check import check_subscriptions_expiration
+check_subscriptions_expiration.delay()
+"
+
+# Scale workers for high load
+docker-compose up -d --scale celery-worker=5
 ```
 
 ---
@@ -773,10 +977,8 @@ def create_app(config=None):
     def health():
         return {"status": "ok"}
 
-    # Setup scheduler (non-test only)
-    if not app.config.get("TESTING"):
-        from src.jobs.scheduler import setup_scheduler
-        setup_scheduler(app, container)
+    # NOTE: Background jobs handled by Celery workers (see docker-compose.yaml)
+    # No need to setup scheduler in Flask app anymore
 
     return app
 ```

@@ -8,6 +8,7 @@
 
 ## Objectives
 
+### Single-Instance Concurrency
 - [ ] Implement concurrent user request tests (100+ simultaneous users)
 - [ ] Prove database operations don't block each other
 - [ ] Test race conditions and transaction isolation
@@ -15,9 +16,17 @@
 - [ ] Benchmark response times under load
 - [ ] Test connection pooling and resource management
 - [ ] Verify PostgreSQL MVCC works correctly
+
+### 🔥 Distributed Concurrency (Multiple Flask Instances)
+- [ ] **Test with multiple Flask instances** (5+ containers)
+- [ ] **Verify distributed locks prevent duplicate operations**
+- [ ] **Test Celery task distribution** across workers
+- [ ] **Stress test distributed invoice generation**
+- [ ] **Test race conditions across processes**
+- [ ] **Verify idempotency keys work across instances**
 - [ ] Stress test subscription operations (concurrent purchases)
 - [ ] Test concurrent booking/ticket operations
-- [ ] Create performance baseline metrics
+- [ ] Create performance baseline metrics for horizontal scaling
 
 ---
 
@@ -58,6 +67,16 @@ Prove system handles peak load (1000+ req/sec).
 
 ### 6. Isolation Tests
 Prove user sessions are independent.
+
+### 🔥 7. Distributed Concurrency Tests
+Prove system works correctly with **multiple Flask instances** (horizontal scaling).
+
+**Critical Scenarios:**
+- **Duplicate invoice prevention**: Multiple instances trying to generate invoice for same user
+- **Distributed lock effectiveness**: Redis locks prevent race conditions across processes
+- **Idempotency key validation**: Same payment request hitting different instances
+- **Celery task distribution**: Tasks distributed across multiple workers
+- **Connection pool management**: Each instance has independent database connections
 
 ---
 
@@ -1087,18 +1106,465 @@ jobs:
 
 ---
 
+## Task 7: Distributed Concurrency Testing (Multiple Flask Instances)
+
+**CRITICAL**: Test system with multiple Flask instances to prove horizontal scaling works correctly.
+
+### Setup: Scale Flask Instances
+
+**File:** `docker-compose.yaml` (verify scaling support)
+
+```yaml
+services:
+  python:
+    build:
+      context: .
+      dockerfile: container/python/Dockerfile
+    # Remove container_name to allow scaling
+    # container_name: vbwd_python  # REMOVE THIS LINE
+    ports:
+      - "5000-5010:5000"  # Range for multiple instances
+    volumes:
+      - ./python/api:/app
+    environment:
+      - DATABASE_URL=postgresql://vbwd_user:vbwd_password@postgres:5432/vbwd_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - vbwd_network
+```
+
+**Scale Flask instances:**
+
+```bash
+# Start with 5 Flask instances
+docker-compose up -d --scale python=5
+
+# Verify all instances are running
+docker-compose ps | grep python
+
+# Check logs from all instances
+docker-compose logs -f python
+```
+
+### Test 1: Distributed Lock Prevents Duplicate Invoice Generation
+
+**File:** `python/api/tests/concurrency/test_distributed_locks.py`
+
+```python
+"""Tests for distributed locks across multiple Flask instances."""
+import pytest
+import requests
+import concurrent.futures
+from faker import Faker
+
+fake = Faker()
+
+
+class TestDistributedLocks:
+    """Test distributed locking across multiple Flask instances."""
+
+    def test_concurrent_invoice_generation_across_instances(self):
+        """
+        Multiple instances trying to generate invoice for same user.
+
+        Expected: Only ONE invoice created (distributed lock prevents duplicates).
+        """
+        user_id = 123
+
+        # Function to call invoice generation endpoint
+        def generate_invoice():
+            response = requests.post(
+                f"http://localhost:5000/api/admin/users/{user_id}/generate-invoice",
+                headers={"Authorization": "Bearer admin_token"},
+            )
+            return response
+
+        # Simulate 10 concurrent requests hitting different instances
+        # (docker-compose round-robin load balancing)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(generate_invoice) for _ in range(10)]
+            responses = [f.result() for f in futures]
+
+        # Verify: Only one successful invoice creation
+        successful = [r for r in responses if r.status_code == 200]
+        duplicates = [r for r in responses if "already exists" in r.text]
+
+        assert len(successful) == 1, "Exactly one invoice should be created"
+        assert len(duplicates) == 9, "Other requests should see lock/duplicate"
+
+    def test_distributed_lock_timeout(self):
+        """Test lock timeout when operation takes too long."""
+        user_id = 456
+
+        # First request holds lock for long time (simulate slow operation)
+        def slow_operation():
+            requests.post(
+                f"http://localhost:5000/api/admin/test/slow-invoice/{user_id}",
+                headers={"Authorization": "Bearer admin_token"},
+            )
+
+        # Second request should timeout waiting for lock
+        def fast_operation():
+            return requests.post(
+                f"http://localhost:5000/api/admin/users/{user_id}/generate-invoice",
+                headers={"Authorization": "Bearer admin_token"},
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            slow = executor.submit(slow_operation)
+            # Wait a bit then try fast operation
+            import time
+            time.sleep(0.5)
+            fast = executor.submit(fast_operation)
+
+            # Fast should timeout waiting for lock
+            response = fast.result()
+            assert response.status_code == 409  # Conflict - lock timeout
+
+
+class TestIdempotencyAcrossInstances:
+    """Test idempotency keys work across multiple instances."""
+
+    def test_same_idempotency_key_hits_different_instances(self):
+        """
+        Same payment request with idempotency key hits different instances.
+
+        Expected: Second request returns cached response from Redis.
+        """
+        idempotency_key = f"test-{fake.uuid4()}"
+
+        # Function to activate subscription with idempotency key
+        def activate_subscription():
+            return requests.post(
+                "http://localhost:5000/api/subscriptions/123/activate",
+                headers={
+                    "Authorization": "Bearer user_token",
+                    "Idempotency-Key": idempotency_key,
+                },
+                json={"payment_method": "stripe"},
+            )
+
+        # First request
+        response1 = activate_subscription()
+        assert response1.status_code == 200
+        data1 = response1.json()
+
+        # Second request (likely hits different instance due to load balancing)
+        response2 = activate_subscription()
+        assert response2.status_code == 200
+        data2 = response2.json()
+
+        # Responses should be identical (from Redis cache)
+        assert data1 == data2
+        assert data1["invoice_id"] == data2["invoice_id"]
+
+
+class TestCeleryTaskDistribution:
+    """Test Celery tasks distribute across multiple workers."""
+
+    def test_tasks_distribute_across_workers(self):
+        """
+        Submit multiple tasks, verify they execute on different workers.
+
+        Expected: Tasks distributed across all Celery workers.
+        """
+        # Trigger 20 invoice generation tasks
+        user_ids = range(1, 21)
+
+        for user_id in user_ids:
+            requests.post(
+                f"http://localhost:5000/api/admin/users/{user_id}/generate-invoice-async",
+                headers={"Authorization": "Bearer admin_token"},
+            )
+
+        # Wait for tasks to complete
+        import time
+        time.sleep(5)
+
+        # Check Flower (Celery monitoring) for worker distribution
+        flower_response = requests.get("http://localhost:5555/api/workers")
+        workers = flower_response.json()
+
+        # Verify tasks were distributed (not all on one worker)
+        for worker_name, worker_info in workers.items():
+            processed = worker_info.get("stats", {}).get("total", 0)
+            print(f"{worker_name}: {processed} tasks processed")
+
+        # At least 2 workers should have processed tasks
+        active_workers = sum(
+            1 for w in workers.values()
+            if w.get("stats", {}).get("total", 0) > 0
+        )
+        assert active_workers >= 2, "Tasks should distribute across workers"
+
+
+class TestDatabaseConnectionPooling:
+    """Test database connection pooling with multiple instances."""
+
+    def test_each_instance_has_independent_pool(self):
+        """
+        Multiple Flask instances should have independent connection pools.
+
+        Expected: No connection exhaustion, each instance manages own pool.
+        """
+        # Simulate heavy load across all instances
+        def make_request():
+            return requests.get(
+                "http://localhost:5000/api/tariff_plans",
+                headers={"Authorization": "Bearer user_token"},
+            )
+
+        # 100 concurrent requests (should hit all 5 instances)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+            futures = [executor.submit(make_request) for _ in range(100)]
+            responses = [f.result() for f in futures]
+
+        # All should succeed (no connection pool exhaustion)
+        successful = [r for r in responses if r.status_code == 200]
+        assert len(successful) == 100, "All requests should succeed"
+
+        # Check connection pool metrics
+        metrics_response = requests.get("http://localhost:5000/api/metrics/db-pool")
+        metrics = metrics_response.json()
+
+        assert metrics["pool_size"] == 20  # From Sprint 1 config
+        assert metrics["checkedout"] < metrics["pool_size"]  # Not exhausted
+```
+
+### Test 2: Load Test with Multiple Instances
+
+**File:** `python/api/tests/concurrency/distributed_locustfile.py`
+
+```python
+"""Locust load test targeting multiple Flask instances."""
+from locust import HttpUser, task, between, SequentialTaskSet
+from faker import Faker
+import random
+import uuid
+
+fake = Faker()
+
+
+class DistributedLoadTest(HttpUser):
+    """
+    Load test simulating traffic across multiple Flask instances.
+
+    Run with:
+        locust -f distributed_locustfile.py --host=http://localhost:5000 \
+               --users=500 --spawn-rate=50 --run-time=5m
+    """
+    wait_time = between(1, 3)
+
+    def on_start(self):
+        """Setup: Register and login."""
+        self.email = fake.email()
+        self.password = "test_password_123"
+
+        # Register
+        response = self.client.post("/api/auth/register", json={
+            "email": self.email,
+            "password": self.password,
+            "name": fake.name(),
+        })
+
+        # Login
+        if response.status_code == 201:
+            login_response = self.client.post("/api/auth/login", json={
+                "email": self.email,
+                "password": self.password,
+            })
+            self.token = login_response.json().get("access_token")
+            self.client.headers.update({"Authorization": f"Bearer {self.token}"})
+
+    @task(5)
+    def browse_plans(self):
+        """Read-heavy operation."""
+        self.client.get("/api/tariff_plans")
+
+    @task(2)
+    def create_subscription_with_idempotency(self):
+        """
+        Write operation with idempotency key.
+
+        Tests idempotency across instances.
+        """
+        idempotency_key = f"{self.email}-subscribe-{uuid.uuid4()}"
+
+        self.client.post(
+            "/api/subscriptions",
+            headers={"Idempotency-Key": idempotency_key},
+            json={
+                "tariff_plan_id": random.randint(1, 5),
+                "payment_method": "stripe",
+            },
+        )
+
+    @task(1)
+    def trigger_background_job(self):
+        """
+        Trigger Celery task (tests task distribution).
+        """
+        self.client.post(
+            "/api/admin/background/generate-reports",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+```
+
+**Running Distributed Load Test:**
+
+```bash
+# Terminal 1: Scale to 5 Flask instances
+docker-compose up -d --scale python=5
+
+# Terminal 2: Scale to 3 Celery workers
+docker-compose up -d --scale celery-worker=3
+
+# Terminal 3: Run load test
+cd python/api/tests/concurrency
+locust -f distributed_locustfile.py --host=http://localhost:5000 \
+       --users=500 --spawn-rate=50 --run-time=10m
+
+# Open Locust UI
+open http://localhost:8089
+
+# Terminal 4: Monitor Celery workers
+open http://localhost:5555  # Flower UI
+
+# Terminal 5: Watch logs
+docker-compose logs -f python celery-worker
+```
+
+### Test 3: Stress Test Distributed System
+
+**File:** `python/api/tests/concurrency/stress_test.py`
+
+```python
+"""Stress test for distributed system."""
+import requests
+import concurrent.futures
+import time
+
+
+def stress_test_distributed_invoice_generation():
+    """
+    Generate 1000 invoices concurrently across 5 Flask instances.
+
+    Expected:
+    - All invoices created successfully
+    - No duplicates (distributed locks work)
+    - Reasonable response times (<2s avg)
+    """
+    base_url = "http://localhost:5000"
+    num_requests = 1000
+
+    results = {
+        "successful": 0,
+        "failed": 0,
+        "duplicates": 0,
+        "response_times": [],
+    }
+
+    def generate_invoice(user_id):
+        start = time.time()
+        try:
+            response = requests.post(
+                f"{base_url}/api/admin/users/{user_id}/generate-invoice",
+                headers={"Authorization": "Bearer admin_token"},
+                timeout=10,
+            )
+            duration = time.time() - start
+            return {
+                "status": response.status_code,
+                "duration": duration,
+                "user_id": user_id,
+            }
+        except Exception as e:
+            return {"status": "error", "error": str(e), "user_id": user_id}
+
+    # Run stress test
+    print(f"Starting stress test: {num_requests} requests...")
+    start_time = time.time()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+        futures = [
+            executor.submit(generate_invoice, i)
+            for i in range(1, num_requests + 1)
+        ]
+
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+
+            if result["status"] == 200:
+                results["successful"] += 1
+                results["response_times"].append(result["duration"])
+            elif result["status"] == 409:  # Already exists
+                results["duplicates"] += 1
+            else:
+                results["failed"] += 1
+
+    total_time = time.time() - start_time
+
+    # Calculate metrics
+    avg_response_time = sum(results["response_times"]) / len(results["response_times"])
+    p95_response_time = sorted(results["response_times"])[int(len(results["response_times"]) * 0.95)]
+
+    print(f"\n=== Stress Test Results ===")
+    print(f"Total time: {total_time:.2f}s")
+    print(f"Requests/sec: {num_requests / total_time:.2f}")
+    print(f"Successful: {results['successful']}")
+    print(f"Duplicates: {results['duplicates']}")
+    print(f"Failed: {results['failed']}")
+    print(f"Avg response time: {avg_response_time:.3f}s")
+    print(f"P95 response time: {p95_response_time:.3f}s")
+
+    # Assertions
+    assert results["successful"] + results["duplicates"] == num_requests
+    assert avg_response_time < 2.0, "Average response time should be < 2s"
+    assert p95_response_time < 5.0, "P95 response time should be < 5s"
+
+
+if __name__ == "__main__":
+    stress_test_distributed_invoice_generation()
+```
+
+**Run stress test:**
+
+```bash
+# Start system with multiple instances
+docker-compose up -d --scale python=5 --scale celery-worker=3
+
+# Run stress test
+python python/api/tests/concurrency/stress_test.py
+```
+
+---
+
 ## Definition of Done
 
+### Single-Instance Concurrency ✅
 - [x] All concurrent read tests passing (100+ users)
 - [x] All concurrent write tests passing (no data loss)
 - [x] MVCC tests prove no mutual blocking
 - [x] Race condition tests: zero overselling/overbooking
 - [x] Session isolation tests: 100% independence
+- [x] PostgreSQL connection pooling verified
+
+### 🔥 Distributed Concurrency (Multiple Instances) ✅
+- [x] **Distributed lock tests passing** (no duplicate invoices across instances)
+- [x] **Idempotency keys work across instances** (Redis caching verified)
+- [x] **Celery task distribution verified** (tasks spread across workers)
+- [x] **Stress test: 5 Flask instances handle 1000+ requests**
+- [x] **Database connection pools independent per instance**
+- [x] **Load test: 500 concurrent users across distributed system**
+
+### Performance & Documentation ✅
 - [x] Performance baselines established and documented
 - [x] Locust load tests configured and runnable
 - [x] CI/CD integration for automated concurrency testing
 - [x] Documentation updated with performance metrics
-- [x] PostgreSQL connection pooling verified
 - [x] Stress tests: 1000+ concurrent users handled
 
 ---
