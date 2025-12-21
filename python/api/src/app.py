@@ -22,13 +22,19 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
         from src.config import get_config
         app.config.from_object(get_config())
 
-    # Initialize extensions (will be added in Sprint 1)
-    # from src.extensions import db
-    # db.init_app(app)
+    # Initialize extensions
+    from src.extensions import db
+    db.init_app(app)
 
-    # Register blueprints (will be added in Sprint 2+)
-    # from src.routes import api_bp
-    # app.register_blueprint(api_bp, url_prefix="/api/v1")
+    # Register blueprints
+    from src.routes.auth import auth_bp
+    from src.routes.user import user_bp
+    from src.routes.tarif_plans import tarif_plans_bp
+    from src.routes.subscriptions import subscriptions_bp
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(user_bp)
+    app.register_blueprint(tarif_plans_bp, url_prefix="/api/v1/tarif-plans")
+    app.register_blueprint(subscriptions_bp, url_prefix="/api/v1/user/subscriptions")
 
     # Health check endpoint
     @app.route("/api/v1/health")

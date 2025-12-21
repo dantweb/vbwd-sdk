@@ -15,8 +15,16 @@ os.environ['TESTING'] = 'true'
 def app():
     """Create application for testing."""
     from src.app import create_app
+    from src.config import get_database_url
 
-    app = create_app({"TESTING": True})
+    # Test configuration with database URI
+    test_config = {
+        "TESTING": True,
+        "SQLALCHEMY_DATABASE_URI": get_database_url(),
+        "SQLALCHEMY_TRACK_MODIFICATIONS": False
+    }
+
+    app = create_app(test_config)
     yield app
 
 

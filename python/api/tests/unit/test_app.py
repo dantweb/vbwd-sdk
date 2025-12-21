@@ -13,8 +13,14 @@ class TestAppFactory:
     def test_create_app_with_test_config(self):
         """create_app should accept test configuration."""
         from src.app import create_app
+        from src.config import get_database_url
 
-        app = create_app({"TESTING": True, "DEBUG": False})
+        app = create_app({
+            "TESTING": True,
+            "DEBUG": False,
+            "SQLALCHEMY_DATABASE_URI": get_database_url(),
+            "SQLALCHEMY_TRACK_MODIFICATIONS": False
+        })
 
         assert app.config["TESTING"] is True
         assert app.config["DEBUG"] is False
