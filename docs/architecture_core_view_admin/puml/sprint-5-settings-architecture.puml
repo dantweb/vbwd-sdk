@@ -1,0 +1,399 @@
+@startuml sprint-5-settings-architecture
+!theme plain
+title Sprint 5: Webhook Monitor & Settings Management Architecture
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+package "Webhook & Settings Plugin" {
+
+    package "Views" #E3F2FD {
+        component "WebhookLogView" as WebhookLog
+        component "WebhookDetailsView" as WebhookDetails
+        component "SystemSettingsView" as SystemSettings
+        component "WebhookConfigView" as WebhookConfig
+
+        package "Components" {
+            component "WebhookLogTable"
+            component "WebhookRetryButton"
+            component "SettingsForm"
+            component "PaymentProviderConfig"
+        }
+
+        WebhookLog --> WebhookLogTable
+        WebhookLog --> WebhookRetryButton
+        SystemSettings --> SettingsForm
+        SystemSettings --> PaymentProviderConfig
+    }
+
+    package "Composables" #F3E5F5 {
+        component "useWebhookLog" as WebhookComp
+        component "useSystemSettings" as SettingsComp
+
+        note right of WebhookComp
+            **SRP: Webhook Logic**
+            - Load webhook logs
+            - Filter & paginate
+            - Retry failed webhooks
+            - View webhook details
+
+            Does NOT:
+            - Make HTTP calls directly
+            - Manage global state
+        end note
+
+        note right of SettingsComp
+            **SRP: Settings Logic**
+            - Load system settings
+            - Update settings
+            - Validate input
+            - Handle form state
+
+            Pure business logic
+        end note
+    }
+
+    package "Stores" #FFF3E0 {
+        component "webhookStore" as WebhookStore
+        component "settingsStore" as SettingsStore
+
+        note right of WebhookStore
+            **State:**
+            - logs: WebhookLog[]
+            - selectedLog: WebhookLog | null
+            - endpoints: WebhookEndpoint[]
+            - loading: boolean
+            - error: string | null
+
+            **DI:**
+            - webhookService: IWebhookService | null
+
+            **Actions:**
+            - fetchWebhookLogs(params)
+            - retryWebhook(id)
+            - fetchWebhookEndpoints()
+
+            All delegate to service
+        end note
+
+        note right of SettingsStore
+            **State:**
+            - systemSettings: SystemSettings | null
+            - paymentProviders: Record<string, PaymentProviderSettings>
+            - emailTemplates: EmailTemplate[]
+            - loading: boolean
+
+            **DI:**
+            - settingsService: ISettingsService | null
+
+            **Actions:**
+            - fetchSystemSettings()
+            - updateSystemSettings(data)
+            - fetchPaymentProviderSettings(provider)
+        end note
+    }
+
+    package "Services" #E8F5E9 {
+        interface "IWebhookService" as IWebhookSvc <<interface>>
+        interface "ISettingsService" as ISettingsSvc <<interface>>
+
+        component "WebhookService" as WebhookSvcImpl
+        component "SettingsService" as SettingsSvcImpl
+
+        note right of IWebhookSvc
+            **LSP Interface:**
+            + getWebhookLogs(params): Promise<PaginatedResponse<WebhookLog>>
+            + getWebhookLogById(id): Promise<WebhookLog>
+            + retryWebhook(id): Promise<WebhookLog>
+            + getWebhookEndpoints(): Promise<WebhookEndpoint[]>
+            + createWebhookEndpoint(url, eventTypes): Promise<WebhookEndpoint>
+            + deleteWebhookEndpoint(id): Promise<void>
+
+            Any implementation can be substituted
+        end note
+
+        note right of WebhookSvcImpl
+            **DI Constructor:**
+            constructor(apiClient: IApiClient)
+
+            **Validation:**
+            - URL validation
+            - Event type validation
+
+            Example:
+            ```typescript
+            async retryWebhook(id: number): Promise<WebhookLog> {
+              return await this.apiClient.post(
+                `/api/v1/admin/webhooks/${id}/retry`
+              )
+            }
+            ```
+
+            **SRP:** Only API communication
+        end note
+
+        note right of ISettingsSvc
+            **LSP Interface:**
+            + getSystemSettings(): Promise<SystemSettings>
+            + updateSystemSettings(data): Promise<SystemSettings>
+            + getPaymentProviderSettings(provider): Promise<PaymentProviderSettings>
+            + updatePaymentProviderSettings(provider, data): Promise<PaymentProviderSettings>
+            + getEmailTemplates(): Promise<EmailTemplate[]>
+            + updateEmailTemplate(id, data): Promise<EmailTemplate>
+        end note
+
+        note right of SettingsSvcImpl
+            **DI Constructor:**
+            constructor(apiClient: IApiClient)
+
+            **Validation:**
+            - Email validation
+            - URL validation
+            - Currency code validation
+
+            Example:
+            ```typescript
+            async updateSystemSettings(
+              data: UpdateSystemSettingsData
+            ): Promise<SystemSettings> {
+              // Validate
+              if (data.supportEmail && !this.isValidEmail(data.supportEmail)) {
+                throw new Error('Invalid email address')
+              }
+
+              // API call
+              return await this.apiClient.put(
+                '/api/v1/admin/settings/system',
+                data
+              )
+            }
+            ```
+
+            **Clean Code:**
+            - Private validation methods
+            - Clear error messages
+            - Type-safe parameters
+        end note
+
+        IWebhookSvc <|.. WebhookSvcImpl : implements
+        ISettingsSvc <|.. SettingsSvcImpl : implements
+    }
+
+    package "Types" #FFFDE7 {
+        component "Webhook.ts" as WebhookTypes
+        component "Settings.ts" as SettingsTypes
+
+        note right of WebhookTypes
+            Domain Models:
+            - WebhookLog
+            - WebhookEventType enum
+            - WebhookStatus enum
+            - PaymentProvider enum
+            - WebhookEndpoint
+            - GetWebhookLogsParams
+
+            Clear type definitions
+        end note
+
+        note right of SettingsTypes
+            Domain Models:
+            - SystemSettings
+            - PaymentProviderSettings
+            - EmailTemplate
+            - EmailCategory enum
+            - UpdateSystemSettingsData
+            - UpdatePaymentProviderData
+        end note
+    }
+}
+
+package "Core SDK" #E1F5FE {
+    interface "IApiClient" as ApiClient <<interface>>
+}
+
+package "Backend API" #FFEBEE {
+    component "/api/v1/admin/webhooks" as WebhookAPI
+    component "/api/v1/admin/settings" as SettingsAPI
+
+    note right of WebhookAPI
+        Webhook Endpoints:
+        - GET /webhooks (list logs)
+        - GET /webhooks/:id (details)
+        - POST /webhooks/:id/retry
+        - GET /webhook-endpoints
+        - POST /webhook-endpoints
+        - DELETE /webhook-endpoints/:id
+    end note
+
+    note right of SettingsAPI
+        Settings Endpoints:
+        - GET /settings/system
+        - PUT /settings/system
+        - GET /settings/payment-providers/:provider
+        - PUT /settings/payment-providers/:provider
+        - GET /settings/email-templates
+        - PUT /settings/email-templates/:id
+    end note
+}
+
+' View → Composable
+WebhookLog ..> WebhookComp : uses
+SystemSettings ..> SettingsComp : uses
+
+' Composable → Store
+WebhookComp ..> WebhookStore : uses
+SettingsComp ..> SettingsStore : uses
+
+' Store → Service (DI)
+WebhookStore --> IWebhookSvc : injected
+SettingsStore --> ISettingsSvc : injected
+
+WebhookSvcImpl .up.|> IWebhookSvc
+SettingsSvcImpl .up.|> ISettingsSvc
+
+' Service → ApiClient (DI)
+WebhookSvcImpl --> ApiClient : injected
+SettingsSvcImpl --> ApiClient : injected
+
+' ApiClient → Backend
+ApiClient --> WebhookAPI : HTTP/HTTPS
+ApiClient --> SettingsAPI : HTTP/HTTPS
+
+' Type dependencies
+WebhookSvcImpl ..> WebhookTypes : uses
+SettingsSvcImpl ..> SettingsTypes : uses
+WebhookStore ..> WebhookTypes : uses
+SettingsStore ..> SettingsTypes : uses
+
+note bottom
+    **Webhook Processing Flow:**
+
+    1. **Payment Provider → Backend:**
+       - Stripe/PayPal sends webhook POST
+       - Backend receives at /webhooks/:provider
+       - Verifies signature
+       - Creates webhook_log record (status: pending)
+
+    2. **Backend Event Processing:**
+       - Event dispatcher processes webhook
+       - Updates payment/subscription/invoice
+       - Updates webhook_log (status: delivered or failed)
+
+    3. **Admin Monitoring:**
+       - Admin opens /admin/webhooks
+       - Composable → Store → Service → API
+       - Backend returns paginated webhook logs
+       - Admin sees all webhooks with status
+
+    4. **Retry Failed Webhook:**
+       - Admin clicks "Retry" on failed webhook
+       - Composable → Store → Service → API
+       - Backend re-processes webhook event
+       - Updates webhook_log status
+       - Returns result to frontend
+end note
+
+note top of WebhookStore
+    **Testing with DI:**
+
+    ```typescript
+    describe('webhookStore', () => {
+      it('should retry failed webhook', async () => {
+        // Arrange
+        const mockService = {
+          retryWebhook: vi.fn().mockResolvedValue({
+            id: 1,
+            status: 'pending',
+            retryCount: 1
+          })
+        }
+
+        store.setWebhookService(mockService)
+
+        // Act
+        await store.retryWebhook(1)
+
+        // Assert
+        expect(mockService.retryWebhook).toHaveBeenCalledWith(1)
+        expect(store.logs[0].status).toBe('pending')
+      })
+    })
+    ```
+
+    **TDD Benefits:**
+    - No API calls in tests
+    - Fast execution
+    - Clear expectations
+end note
+
+note right of SettingsSvcImpl
+    **Validation TDD Example:**
+
+    ```typescript
+    describe('SettingsService', () => {
+      it('should throw error for invalid email', async () => {
+        // Arrange
+        const service = new SettingsService(mockApi)
+
+        // Act & Assert
+        await expect(
+          service.updateSystemSettings({
+            supportEmail: 'invalid-email'
+          })
+        ).rejects.toThrow('Invalid email address')
+      })
+
+      it('should throw error for invalid URL', async () => {
+        await expect(
+          service.updateSystemSettings({
+            siteUrl: 'not-a-url'
+          })
+        ).rejects.toThrow('Invalid site URL')
+      })
+
+      it('should throw error if no data provided', async () => {
+        await expect(
+          service.updateSystemSettings({})
+        ).rejects.toThrow('No data provided for update')
+      })
+    })
+    ```
+
+    **Clean Code:**
+    - Test names describe behavior
+    - Each test has single assertion
+    - Clear arrange-act-assert
+end note
+
+note left of SystemSettings
+    **Settings UI Features:**
+
+    **System Settings:**
+    - Site name & URL
+    - Support email
+    - Default currency & language
+    - Timezone
+    - Registration settings
+    - Session timeout
+    - Maintenance mode
+
+    **Payment Provider Settings:**
+    - Enable/disable provider
+    - Test mode toggle
+    - API keys (masked)
+    - Webhook secrets (masked)
+    - Provider-specific config
+
+    **Email Templates:**
+    - Edit subject & body
+    - Preview with sample data
+    - Enable/disable template
+    - Variable substitution list
+
+    **Security:**
+    - Sensitive data masked in UI
+    - Audit log for all changes
+    - Admin role required
+end note
+
+@enduml

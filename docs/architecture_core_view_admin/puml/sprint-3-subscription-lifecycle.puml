@@ -1,0 +1,171 @@
+@startuml sprint-3-subscription-lifecycle
+!theme plain
+title Sprint 3: Subscription Lifecycle State Diagram
+
+skinparam state {
+    BackgroundColor<<active>> #C8E6C9
+    BorderColor<<active>> #388E3C
+    BackgroundColor<<inactive>> #FFCDD2
+    BorderColor<<inactive>> #C62828
+    BackgroundColor<<trial>> #BBDEFB
+    BorderColor<<trial>> #1976D2
+    BackgroundColor<<problem>> #FFE0B2
+    BorderColor<<problem>> #F57C00
+}
+
+state "TRIALING" as Trial <<trial>>
+state "ACTIVE" as Active <<active>>
+state "PAST_DUE" as PastDue <<problem>>
+state "CANCELLED" as Cancelled <<inactive>>
+state "EXPIRED" as Expired <<inactive>>
+state "PAUSED" as Paused <<inactive>>
+
+note right of Trial
+    **Trial Period**
+    - Free trial active
+    - No payment required yet
+    - Limited to trial period
+    - Can be converted to paid
+end note
+
+note right of Active
+    **Active Subscription**
+    - Payment successful
+    - Full access to features
+    - Auto-renewal enabled
+    - Can be:
+      • Cancelled (immediate or at period end)
+      • Upgraded/downgraded
+      • Paused
+end note
+
+note right of PastDue
+    **Payment Failed**
+    - Last payment failed
+    - Retry attempts scheduled
+    - Grace period active
+    - Limited or full access
+      (configurable)
+
+    **Admin Actions:**
+    - Retry payment manually
+    - Contact customer
+    - Cancel subscription
+end note
+
+note right of Cancelled
+    **Cancelled Subscription**
+    - User or admin cancelled
+    - Access until period end
+      (or immediate)
+    - No auto-renewal
+    - Can be reactivated
+
+    **Reasons:**
+    - Customer request
+    - Non-payment
+    - Fraud
+    - Service violation
+end note
+
+note right of Expired
+    **Expired Subscription**
+    - Period ended
+    - No payment received
+    - No access
+    - Can be renewed
+
+    **Common Paths:**
+    - Trial expired → Expired
+    - Cancelled → Expired
+    - Past Due → Expired
+end note
+
+note right of Paused
+    **Paused Subscription**
+    - Temporarily suspended
+    - No billing during pause
+    - Can be resumed
+    - Useful for:
+      • Seasonal businesses
+      • Customer request
+      • Admin action
+end note
+
+[*] --> Trial : User subscribes\nwith trial
+
+Trial --> Active : Trial period ends\nPayment succeeds
+Trial --> Expired : Trial period ends\nNo payment method
+
+Active --> Active : Payment succeeds\n(auto-renewal)
+
+Active --> PastDue : Payment fails
+Active --> Cancelled : User/admin cancels
+Active --> Paused : Admin pauses
+
+PastDue --> Active : Payment retry succeeds
+PastDue --> Cancelled : Max retries exceeded
+PastDue --> Cancelled : Admin cancels
+
+Cancelled --> Expired : Period ends
+Cancelled --> Active : Admin reactivates\n(before period end)
+
+Paused --> Active : Admin resumes
+Paused --> Cancelled : Admin cancels
+
+Expired --> Active : User renews\nNew subscription
+
+note bottom
+    **Admin Actions Available:**
+
+    **From ACTIVE:**
+    - Cancel (immediate or at period end)
+    - Pause (suspend billing)
+    - Upgrade plan (change to higher tier)
+    - Downgrade plan (change to lower tier)
+    - Extend period (add time)
+
+    **From PAST_DUE:**
+    - Retry payment (manual)
+    - Cancel subscription
+    - Extend grace period
+
+    **From CANCELLED:**
+    - Reactivate (if before period end)
+    - Issue refund (partial or full)
+
+    **From PAUSED:**
+    - Resume subscription
+    - Cancel subscription
+
+    **From EXPIRED:**
+    - Create new subscription
+
+    **Service Architecture (DI):**
+    SubscriptionService implements ISubscriptionService
+    - cancelSubscription(id, data)
+    - reactivateSubscription(id)
+    - updateSubscription(id, data)
+    - retryPayment(subscriptionId)
+
+    All actions use dependency-injected
+    IApiClient for backend communication
+end note
+
+note top
+    **SOLID Principles:**
+
+    **SRP**: Each state has single responsibility
+    **OCP**: Can add new states without modifying existing
+    **LSP**: ISubscriptionService ensures substitutability
+    **ISP**: Specific interfaces for subscription operations
+    **DI**: Service injected into store for testability
+
+    **Clean Code:**
+    - Clear state names
+    - Explicit transitions
+    - Well-documented reasons
+    - Predictable behavior
+end note
+
+@enduml

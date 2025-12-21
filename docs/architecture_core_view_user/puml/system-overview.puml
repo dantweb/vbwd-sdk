@@ -109,10 +109,10 @@ Vitest --> CI : runs in
 Playwright --> CI : runs in
 
 package "Hosting" #C8E6C9 {
-    component "Static Hosting" as Hosting
+    component "Static Hosting" as HostingService
 }
 
-Shell --> Hosting : deployed to
+Shell --> HostingService : deployed to
 
 note right of PluginSys
   **Plugin Architecture**

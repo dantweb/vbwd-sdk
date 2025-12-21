@@ -1,6 +1,6 @@
-# Sprint 1: Data Layer
+# Sprint 1: Data Layer + Database Migrations
 
-**Goal:** Implement domain models and repository layer with full test coverage.
+**Goal:** Implement domain models, repository layer, and Alembic migration system with full test coverage.
 
 **Prerequisites:** Sprint 0 complete
 
@@ -8,6 +8,13 @@
 
 ## Objectives
 
+### 🔥 Critical: Migration System Setup
+- [ ] **Alembic configuration** (migration framework)
+- [ ] **Initial migration script** (create all tables)
+- [ ] **Migration testing** (up/down migrations)
+- [ ] **Seed data scripts** (development fixtures)
+
+### Core Models
 - [ ] User model with status/role enums
 - [ ] UserDetails model
 - [ ] UserCase model
@@ -16,13 +23,559 @@
 - [ ] TarifPlan model (with multi-currency pricing)
 - [ ] Subscription model with lifecycle states
 - [ ] UserInvoice model with payment states + tax breakdown
+
+### Repository Layer
 - [ ] Base repository implementation
-- [ ] All entity repositories
-- [ ] Database migrations
+- [ ] All entity repositories (User, Subscription, Invoice, etc.)
 
 ---
 
 ## Tasks
+
+### 1.0 Alembic Migration System Setup
+
+**Priority:** 🔥 **CRITICAL - Must be completed first**
+
+Database migrations are essential for:
+- Version control for database schema
+- Safe schema changes in production
+- Rollback capability
+- Team collaboration on schema changes
+- Automated deployment
+
+#### Step 1: Install Alembic
+
+**File:** `python/api/requirements.txt`
+
+Add Alembic dependency:
+
+```txt
+# Existing dependencies...
+Flask==3.0.0
+SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# Add Alembic for migrations
+alembic==1.13.1
+```
+
+#### Step 2: Initialize Alembic
+
+**Command:**
+
+```bash
+# Inside python/api directory
+docker-compose run --rm python alembic init alembic
+```
+
+This creates:
+```
+python/api/
+├── alembic/
+│   ├── versions/          # Migration scripts go here
+│   ├── env.py             # Alembic environment config
+│   ├── script.py.mako     # Migration template
+│   └── README
+├── alembic.ini            # Alembic configuration
+```
+
+#### Step 3: Configure Alembic
+
+**File:** `python/api/alembic.ini`
+
+Update database connection:
+
+```ini
+# alembic.ini
+[alembic]
+script_location = alembic
+prepend_sys_path = .
+
+# Use environment variable for database URL
+sqlalchemy.url = postgresql://%(DB_USER)s:%(DB_PASSWORD)s@%(DB_HOST)s:%(DB_PORT)s/%(DB_NAME)s
+
+[alembic:postgresql]
+DB_USER = vbwd_user
+DB_PASSWORD = vbwd_password
+DB_HOST = postgres
+DB_PORT = 5432
+DB_NAME = vbwd_db
+```
+
+**File:** `python/api/alembic/env.py`
+
+Configure to use our models:
+
+```python
+"""Alembic environment configuration."""
+from logging.config import fileConfig
+import os
+import sys
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+from alembic import context
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+# Import our Base to get metadata
+from src.models.base import Base
+from src.config import get_database_url
+
+# Import all models so Alembic can detect them
+from src.models.user import User
+from src.models.user_details import UserDetails
+from src.models.user_case import UserCase
+from src.models.currency import Currency
+from src.models.tax import Tax
+from src.models.tarif_plan import TarifPlan
+from src.models.subscription import Subscription
+from src.models.user_invoice import UserInvoice
+
+# Alembic Config object
+config = context.config
+
+# Interpret the config file for Python logging
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# Add our models' MetaData for autogenerate support
+target_metadata = Base.metadata
+
+
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode."""
+    url = get_database_url()
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode."""
+    configuration = config.get_section(config.config_ini_section)
+    configuration["sqlalchemy.url"] = get_database_url()
+
+    connectable = engine_from_config(
+        configuration,
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
+```
+
+#### Step 4: Create Initial Migration
+
+**Command:**
+
+```bash
+# Generate initial migration from models
+docker-compose run --rm python alembic revision --autogenerate -m "initial_schema"
+```
+
+This creates: `alembic/versions/xxxx_initial_schema.py`
+
+**Example migration file:**
+
+```python
+"""initial_schema
+
+Revision ID: abc123def456
+Revises:
+Create Date: 2026-01-01 10:00:00.000000
+
+"""
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+# revision identifiers
+revision = 'abc123def456'
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    """Create all tables."""
+    # User table
+    op.create_table(
+        'user',
+        sa.Column('id', sa.BigInteger(), nullable=False),
+        sa.Column('email', sa.String(255), nullable=False),
+        sa.Column('password_hash', sa.String(255), nullable=False),
+        sa.Column('status', sa.Enum('pending', 'active', 'suspended', 'deleted', name='userstatus'), nullable=False),
+        sa.Column('role', sa.Enum('user', 'admin', name='userrole'), nullable=False),
+        sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.Column('updated_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('email')
+    )
+    op.create_index('idx_user_email', 'user', ['email'])
+    op.create_index('idx_user_status', 'user', ['status'])
+
+    # UserDetails table
+    op.create_table(
+        'user_details',
+        sa.Column('id', sa.BigInteger(), nullable=False),
+        sa.Column('user_id', sa.BigInteger(), nullable=False),
+        sa.Column('first_name', sa.String(100), nullable=True),
+        sa.Column('last_name', sa.String(100), nullable=True),
+        sa.Column('address_line_1', sa.String(255), nullable=True),
+        sa.Column('address_line_2', sa.String(255), nullable=True),
+        sa.Column('city', sa.String(100), nullable=True),
+        sa.Column('postal_code', sa.String(20), nullable=True),
+        sa.Column('country', sa.String(2), nullable=True),
+        sa.Column('phone', sa.String(20), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.Column('updated_at', sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('idx_user_details_user_id', 'user_details', ['user_id'], unique=True)
+
+    # Additional tables: user_case, currency, tax, tarif_plan, subscription, user_invoice
+    # ... (similar structure for all other tables)
+
+
+def downgrade() -> None:
+    """Drop all tables."""
+    op.drop_table('user_invoice')
+    op.drop_table('subscription')
+    op.drop_table('tarif_plan')
+    op.drop_table('tax')
+    op.drop_table('currency')
+    op.drop_table('user_case')
+    op.drop_table('user_details')
+    op.drop_index('idx_user_status', 'user')
+    op.drop_index('idx_user_email', 'user')
+    op.drop_table('user')
+
+    # Drop enums
+    op.execute('DROP TYPE IF EXISTS userstatus')
+    op.execute('DROP TYPE IF EXISTS userrole')
+    op.execute('DROP TYPE IF EXISTS subscriptionstatus')
+    op.execute('DROP TYPE IF EXISTS invoicestatus')
+```
+
+#### Step 5: Apply Migration
+
+**Commands:**
+
+```bash
+# Check migration status
+docker-compose run --rm python alembic current
+
+# Show pending migrations
+docker-compose run --rm python alembic heads
+
+# Apply migration (upgrade to latest)
+docker-compose run --rm python alembic upgrade head
+
+# Rollback one migration
+docker-compose run --rm python alembic downgrade -1
+
+# Rollback to specific revision
+docker-compose run --rm python alembic downgrade abc123def456
+
+# Show migration history
+docker-compose run --rm python alembic history
+```
+
+#### Step 6: Seed Data Script
+
+**File:** `python/api/src/scripts/seed_data.py`
+
+```python
+"""Seed database with initial data."""
+import sys
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from src.config import get_database_url
+from src.models.currency import Currency
+from src.models.tax import Tax, TaxRate
+from src.models.tarif_plan import TarifPlan
+from decimal import Decimal
+from datetime import datetime
+
+
+def seed_currencies(session):
+    """Seed default currencies."""
+    currencies = [
+        Currency(
+            code='EUR',
+            name='Euro',
+            symbol='€',
+            exchange_rate=Decimal('1.00'),
+            is_default=True
+        ),
+        Currency(
+            code='USD',
+            name='US Dollar',
+            symbol='$',
+            exchange_rate=Decimal('1.10')
+        ),
+        Currency(
+            code='GBP',
+            name='British Pound',
+            symbol='£',
+            exchange_rate=Decimal('0.85')
+        ),
+    ]
+    session.add_all(currencies)
+    session.commit()
+    print(f"✓ Seeded {len(currencies)} currencies")
+
+
+def seed_taxes(session):
+    """Seed default tax rates."""
+    # EU VAT
+    eu_vat = Tax(
+        name='EU VAT',
+        type='vat',
+        country='EU',
+        rate=Decimal('19.00'),
+        description='Standard EU VAT rate'
+    )
+    session.add(eu_vat)
+    session.commit()
+
+    # Tax rate history
+    rate = TaxRate(
+        tax_id=eu_vat.id,
+        rate=Decimal('19.00'),
+        effective_from=datetime(2020, 1, 1)
+    )
+    session.add(rate)
+    session.commit()
+    print("✓ Seeded tax rates")
+
+
+def seed_tarif_plans(session):
+    """Seed default tariff plans."""
+    plans = [
+        TarifPlan(
+            name='Starter',
+            slug='starter',
+            description='Perfect for small projects',
+            price=Decimal('9.99'),
+            currency='EUR',
+            billing_period='monthly',
+            features=['Up to 1,000 subscribers', 'Email support', 'Basic analytics'],
+            is_active=True,
+            sort_order=1
+        ),
+        TarifPlan(
+            name='Professional',
+            slug='professional',
+            description='For growing businesses',
+            price=Decimal('29.99'),
+            currency='EUR',
+            billing_period='monthly',
+            features=['Up to 10,000 subscribers', 'Priority support', 'Advanced analytics', 'API access'],
+            is_active=True,
+            sort_order=2
+        ),
+        TarifPlan(
+            name='Enterprise',
+            slug='enterprise',
+            description='For large organizations',
+            price=Decimal('99.99'),
+            currency='EUR',
+            billing_period='monthly',
+            features=['Unlimited subscribers', '24/7 support', 'Custom integrations', 'SLA'],
+            is_active=True,
+            sort_order=3
+        ),
+    ]
+    session.add_all(plans)
+    session.commit()
+    print(f"✓ Seeded {len(plans)} tariff plans")
+
+
+def main():
+    """Run all seed functions."""
+    engine = create_engine(get_database_url())
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    try:
+        print("🌱 Seeding database...")
+        seed_currencies(session)
+        seed_taxes(session)
+        seed_tarif_plans(session)
+        print("✅ Database seeded successfully!")
+    except Exception as e:
+        print(f"❌ Error seeding database: {e}")
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+**Run seed script:**
+
+```bash
+docker-compose run --rm python python src/scripts/seed_data.py
+```
+
+#### Step 7: Migration Commands Reference
+
+**File:** `python/api/Makefile` (optional, for convenience)
+
+```makefile
+# Database migration commands
+
+.PHONY: db-migrate db-upgrade db-downgrade db-current db-history db-seed
+
+# Create new migration
+db-migrate:
+	docker-compose run --rm python alembic revision --autogenerate -m "$(name)"
+
+# Apply all pending migrations
+db-upgrade:
+	docker-compose run --rm python alembic upgrade head
+
+# Rollback one migration
+db-downgrade:
+	docker-compose run --rm python alembic downgrade -1
+
+# Show current migration
+db-current:
+	docker-compose run --rm python alembic current
+
+# Show migration history
+db-history:
+	docker-compose run --rm python alembic history
+
+# Seed database with initial data
+db-seed:
+	docker-compose run --rm python python src/scripts/seed_data.py
+
+# Fresh database (drop, migrate, seed)
+db-fresh: db-reset db-upgrade db-seed
+
+# Reset database (WARNING: destroys data)
+db-reset:
+	docker-compose run --rm python alembic downgrade base
+```
+
+**Usage:**
+
+```bash
+# Create new migration after model changes
+make db-migrate name="add_booking_tables"
+
+# Apply migrations
+make db-upgrade
+
+# Seed data
+make db-seed
+
+# Fresh database (for development)
+make db-fresh
+```
+
+#### Testing Migration System
+
+**File:** `python/api/tests/integration/test_migrations.py`
+
+```python
+"""Test database migrations."""
+import pytest
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, inspect
+from src.config import get_database_url
+
+
+class TestMigrations:
+    """Test Alembic migrations."""
+
+    def test_upgrade_and_downgrade(self):
+        """Test that migrations can upgrade and downgrade."""
+        # Create Alembic config
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.set_main_option("sqlalchemy.url", get_database_url())
+
+        # Downgrade to base (empty database)
+        command.downgrade(alembic_cfg, "base")
+
+        # Upgrade to head (latest migration)
+        command.upgrade(alembic_cfg, "head")
+
+        # Check that tables exist
+        engine = create_engine(get_database_url())
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+
+        assert 'user' in tables
+        assert 'user_details' in tables
+        assert 'tarif_plan' in tables
+        assert 'subscription' in tables
+        assert 'user_invoice' in tables
+
+        # Downgrade again
+        command.downgrade(alembic_cfg, "base")
+
+        # Check that tables are gone
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        assert len(tables) == 0
+
+    def test_migration_history(self):
+        """Test that migration history is linear."""
+        alembic_cfg = Config("alembic.ini")
+
+        # Get all migrations
+        from alembic.script import ScriptDirectory
+        script = ScriptDirectory.from_config(alembic_cfg)
+
+        # Check that there's at least one migration
+        revisions = list(script.walk_revisions())
+        assert len(revisions) > 0
+
+        # Check that initial migration has no parent
+        initial = revisions[-1]
+        assert initial.down_revision is None
+```
+
+**Run migration tests:**
+
+```bash
+docker-compose run --rm python pytest tests/integration/test_migrations.py -v
+```
+
+---
 
 ### 1.1 Base Model and Enums
 

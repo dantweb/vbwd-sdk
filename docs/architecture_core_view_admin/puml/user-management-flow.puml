@@ -88,7 +88,7 @@ note right
   Requires JWT with role="admin"
 end note
 
-note left of Frontend
+note left
   **User List Features:**
 
   - Pagination (25/50/100 per page)

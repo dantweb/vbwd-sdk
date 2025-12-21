@@ -1,0 +1,156 @@
+@startuml sprint-1-user-management-architecture
+!theme plain
+title Sprint 1: User Management Plugin - Architecture
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam component {
+    BackgroundColor<<view>> #E3F2FD
+    BorderColor<<view>> #1976D2
+    BackgroundColor<<composable>> #F3E5F5
+    BorderColor<<composable>> #7B1FA2
+    BackgroundColor<<store>> #FFF3E0
+    BorderColor<<store>> #F57C00
+    BackgroundColor<<service>> #E8F5E9
+    BorderColor<<service>> #388E3C
+    BackgroundColor<<interface>> #FFEBEE
+    BorderColor<<interface>> #C62828
+}
+
+package "User Management Plugin" {
+
+    package "Views" <<view>> {
+        [UserListView] as ListView
+        [UserDetailsView] as DetailsView
+
+        package "Components" {
+            [UserTable]
+            [UserCard]
+            [ActivityLog]
+        }
+
+        ListView --> UserTable
+        DetailsView --> UserCard
+        DetailsView --> ActivityLog
+    }
+
+    package "Composables" <<composable>> {
+        [useUserList] as ListComp
+        [useUserDetails] as DetailsComp
+
+        note right of ListComp
+            **SRP**: List logic only
+            - Pagination
+            - Filtering
+            - Sorting
+        end note
+
+        note right of DetailsComp
+            **SRP**: Details logic only
+            - Load user
+            - Update user
+            - User actions
+        end note
+    }
+
+    package "Store (Pinia)" <<store>> {
+        [userManagementStore] as Store
+
+        note right of Store
+            **State Management**
+            - users[]
+            - selectedUser
+            - pagination
+            - loading/error
+
+            **DI**: Service injected
+        end note
+    }
+
+    package "Services" <<service>> {
+        interface "IUserService" as IUserSvc <<interface>>
+        [UserService] as UserSvcImpl
+
+        note right of IUserSvc
+            **LSP Principle**
+            Any implementation can
+            be substituted
+
+            Methods:
+            + getUsers()
+            + getUserById()
+            + updateUser()
+            + updateUserStatus()
+        end note
+
+        note right of UserSvcImpl
+            **DI Pattern**
+            constructor(apiClient)
+
+            **SRP**: API calls only
+        end note
+
+        IUserSvc <|.. UserSvcImpl : implements
+    }
+
+    package "Core SDK" {
+        interface "IApiClient" as ApiClient <<interface>>
+
+        note right of ApiClient
+            Injected dependency
+            - HTTP methods
+            - Auth handling
+            - Error normalization
+        end note
+    }
+
+    package "Types" {
+        [User.ts] as Types
+
+        note right of Types
+            Domain models:
+            - User
+            - UserStatus
+            - UserRole
+            - GetUsersParams
+        end note
+    }
+}
+
+' Connections (DI flow)
+ListView ..> ListComp : uses
+DetailsView ..> DetailsComp : uses
+
+ListComp ..> Store : uses
+DetailsComp ..> Store : uses
+
+Store --> IUserSvc : injected via\nsetUserService()
+UserSvcImpl --> ApiClient : injected via\nconstructor
+
+UserSvcImpl ..> Types : uses
+Store ..> Types : uses
+ListComp ..> Types : uses
+
+' Backend
+package "Backend API" #FFEBEE {
+    [/api/v1/admin/users] as API
+}
+
+ApiClient --> API : HTTP/HTTPS
+
+note bottom of Store
+    **Dependency Injection Flow:**
+    1. App initializes UserService(apiClient)
+    2. Store receives service via setPlanService()
+    3. Composables use store methods
+    4. Views use composables
+
+    **SOLID Compliance:**
+    - SRP: Each layer has one responsibility
+    - OCP: Extensible via plugins
+    - LSP: IUserService can be substituted
+    - ISP: Specific interfaces per concern
+    - DI: All dependencies injected
+end note
+
+@enduml

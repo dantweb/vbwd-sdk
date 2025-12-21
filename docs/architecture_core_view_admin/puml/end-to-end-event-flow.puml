@@ -1,0 +1,332 @@
+@startuml end-to-end-event-flow
+!theme plain
+title End-to-End Event Flow: Frontend → Backend → Frontend
+
+|Admin User|
+start
+:Click "Suspend User" button;
+
+|Vue Component\n(UserDetailsView)|
+:onClick handler;
+:Call suspendUser(userId);
+
+|Composable\n(useUserDetails)|
+:suspendUser(userId);
+note right
+    **Frontend Event 1:**
+    eventBus.emit('user:suspend:requested', {
+      userId: 123
+    })
+end note
+:Emit 'user:suspend:requested' event;
+
+|Event Bus\n(Frontend)|
+:Dispatch to listeners;
+
+|Composable|
+:Call userService.updateUserStatus();
+
+|UserService\n(Frontend)|
+note right
+    **Frontend Event 2:**
+    eventBus.emit('user:status:changing', {
+      userId: 123,
+      oldStatus: 'active',
+      newStatus: 'suspended'
+    })
+end note
+:Emit 'user:status:changing' event;
+
+|ApiClient\n(Frontend)|
+note right
+    **Frontend Event 3:**
+    eventBus.emit('api:request:start', {
+      url: '/api/v1/admin/users/123/status',
+      method: 'PUT',
+      data: { status: 'suspended' }
+    })
+end note
+:Emit 'api:request:start' event;
+:PUT /api/v1/admin/users/123/status;
+:Body: { status: "suspended" };
+
+|Flask Route\n(Backend)|
+:Receive HTTP request;
+:Parse JSON body;
+:Extract user_id, status;
+:Get admin_id from JWT;
+
+note right
+    **Backend Event 1:**
+    ```python
+    event = UserStatusUpdateRequestedEvent(
+      user_id=123,
+      status='suspended',
+      admin_id=1
+    )
+    ```
+end note
+:Create UserStatusUpdateRequestedEvent;
+
+|Event Dispatcher\n(Backend)|
+:Find handlers for 'user.status.update_requested';
+:Dispatch to UserStatusUpdateHandler;
+
+|UserStatusUpdateHandler\n(Backend)|
+:handle(event);
+partition "Handler Logic" {
+    :Load user via UserService.get_by_id(123);
+
+    |UserService\n(Backend)|
+    :Query UserRepository;
+
+    |UserRepository\n(Backend)|
+    :SELECT * FROM users WHERE id = 123;
+
+    |PostgreSQL\n(Database)|
+    :Return user record;
+
+    |UserRepository|
+    :Convert to User domain object;
+
+    |UserService|
+    :Return User(id=123, status='active');
+
+    |UserStatusUpdateHandler|
+    :old_status = 'active';
+    :Call UserService.update_status(123, 'suspended');
+
+    |UserService|
+    :Validate status;
+    :user.status = 'suspended';
+    :user.updated_at = NOW();
+    :Call UserRepository.save(user);
+
+    |UserRepository|
+    :Convert domain User to UserModel;
+    :UPDATE users SET status='suspended', updated_at=NOW() WHERE id=123;
+    :COMMIT;
+
+    |PostgreSQL|
+    :Update executed;
+
+    |UserRepository|
+    :Return updated User;
+
+    |UserService|
+    :Return User(id=123, status='suspended');
+
+    |UserStatusUpdateHandler|
+    :updated_user = result;
+    :Call AuditService.log_action();
+
+    |AuditService\n(Backend)|
+    :INSERT INTO audit_logs (...);
+    :Log admin action;
+
+    |UserStatusUpdateHandler|
+    :Call NotificationService.notify_user();
+
+    |NotificationService\n(Backend)|
+    :Load email template 'account_suspended';
+    :Send email to user;
+
+    |UserStatusUpdateHandler|
+    note right
+        **Backend Event 2:**
+        ```python
+        result_event = UserStatusUpdatedEvent(
+          user_id=123,
+          old_status='active',
+          new_status='suspended',
+          admin_id=1
+        )
+        ```
+    end note
+    :Create UserStatusUpdatedEvent;
+    :Emit via EventDispatcher;
+
+    |Event Dispatcher|
+    :Dispatch to all listeners;
+    note right
+        Possible listeners:
+        - ActivityLogHandler
+        - AnalyticsHandler
+        - WebSocketNotificationHandler
+    end note
+}
+
+|UserStatusUpdateHandler|
+:return EventResult.success(updated_user);
+
+|Flask Route|
+:result = event_dispatcher.emit(event);
+:response_data = result.to_dict();
+:return jsonify(response_data), 200;
+
+|HTTP Response|
+:Status: 200 OK;
+:Body: { "id": 123, "status": "suspended", ... };
+
+|ApiClient\n(Frontend)|
+:Receive response;
+note right
+    **Frontend Event 4:**
+    eventBus.emit('api:request:success', {
+      url: '/api/v1/admin/users/123/status',
+      method: 'PUT',
+      response: { id: 123, status: 'suspended' }
+    })
+end note
+:Emit 'api:request:success' event;
+:Return response data;
+
+|UserService\n(Frontend)|
+:Receive updated user;
+note right
+    **Frontend Event 5:**
+    eventBus.emit('user:status:changed', {
+      userId: 123,
+      status: 'suspended'
+    })
+end note
+:Emit 'user:status:changed' event;
+:Return user to composable;
+
+|Event Bus\n(Frontend)|
+:Dispatch 'user:status:changed' to all listeners;
+
+partition "Multiple Listeners React" {
+    |userManagementStore|
+    :Listen to 'user:status:changed';
+    :Update user in users[];
+    :Update selectedUser;
+
+    |activityLogComponent|
+    :Listen to 'user:status:changed';
+    :Refresh activity log;
+
+    |analyticsStore|
+    :Listen to 'user:status:changed';
+    :Update user metrics;
+
+    |toastService|
+    :Listen to 'api:request:success';
+    :Show success toast;
+}
+
+|Vue Component\n(UserDetailsView)|
+:Reactive update;
+:Re-render with new data;
+:Status badge shows "Suspended";
+
+|Admin User|
+:See "Suspended" status;
+:See success message;
+stop
+
+note bottom
+    **Event Summary:**
+
+    **Frontend Events (5 total):**
+    1. user:suspend:requested (UI action)
+    2. user:status:changing (before API call)
+    3. api:request:start (HTTP request started)
+    4. api:request:success (HTTP response received)
+    5. user:status:changed (after successful update)
+
+    **Backend Events (2 total):**
+    1. user.status.update_requested (command event)
+    2. user.status.updated (domain event)
+
+    **Benefits:**
+    - **Decoupling:** Components don't know about each other
+    - **Auditability:** All events logged
+    - **Testability:** Easy to mock event bus
+    - **Real-time:** Multiple listeners can react
+    - **Maintainability:** Add new listeners without changing existing code
+end note
+
+note right
+    **SOLID Principles in Action:**
+
+    **SRP - Single Responsibility:**
+    - Route: HTTP handling
+    - Handler: Event processing
+    - Service: Business logic
+    - Repository: Data access
+    - Component: UI rendering
+
+    **OCP - Open/Closed:**
+    - Add new event listeners without modifying existing code
+    - Extend event types without changing dispatcher
+
+    **LSP - Liskov Substitution:**
+    - IEventHandler can be substituted
+    - IUserService can be mocked
+    - IEventDispatcher can be replaced
+
+    **ISP - Interface Segregation:**
+    - Focused interfaces (IEventHandler, IUserService)
+    - No fat interfaces
+
+    **DI - Dependency Injection:**
+    - All services injected via constructor
+    - EventBus injected into services
+    - Testable with mocks
+end note
+
+note left
+    **TDD Example:**
+
+    **Frontend Test:**
+    ```typescript
+    it('should emit events on user suspend', async () => {
+      const mockEventBus = {
+        emit: vi.fn(),
+        on: vi.fn()
+      }
+
+      const service = new UserService(mockApi, mockEventBus)
+      await service.updateUserStatus(123, 'suspended')
+
+      expect(mockEventBus.emit).toHaveBeenCalledWith(
+        'user:status:changing',
+        expect.objectContaining({ userId: 123 })
+      )
+
+      expect(mockEventBus.emit).toHaveBeenCalledWith(
+        'user:status:changed',
+        expect.objectContaining({ status: 'suspended' })
+      )
+    })
+    ```
+
+    **Backend Test:**
+    ```python
+    def test_user_status_update_handler():
+        mock_user_service = Mock(spec=IUserService)
+        mock_dispatcher = Mock(spec=IEventDispatcher)
+
+        handler = UserStatusUpdateHandler(
+            mock_user_service,
+            Mock(), Mock(), mock_dispatcher
+        )
+
+        event = UserStatusUpdateRequestedEvent(
+            user_id=123,
+            status='suspended',
+            admin_id=1
+        )
+
+        result = handler.handle(event)
+
+        assert result.success
+        mock_user_service.update_status.assert_called_with(
+            123, 'suspended'
+        )
+        mock_dispatcher.emit.assert_called()
+    ```
+end note
+
+@enduml

@@ -86,20 +86,43 @@ class IPaymentGateway(ABC):
 
 ---
 
-## Sprint Overview
+## Sprint Overview (CE Core - Immediate Priority)
 
-| Sprint | Focus | Key Deliverables |
-|--------|-------|------------------|
-| 0 | Foundation | Docker, CI, project structure, base classes |
-| 1 | Data Layer | Models, repositories, database migrations |
-| 2 | Auth & Users | Registration, login, JWT, user management |
-| 3 | Subscriptions | Tariff plans, subscription lifecycle |
-| 4 | Payments | Invoice, PayPal/Stripe integration |
-| 5 | Admin & Webhooks | Admin API, webhook handlers |
-| 6 | Booking Models | Room, Timeslot, Booking models & services |
-| 7 | Booking API | User and admin booking endpoints |
-| 8 | Ticket Models | Event, Ticket, TicketScan models & services |
-| 9 | Ticket API | Event browsing, ticket management, scanner |
+### Phase 1: Core Platform (CE v1.0 - Launch Ready)
+
+| Sprint | Focus | Key Deliverables | Priority |
+|--------|-------|------------------|----------|
+| 0 | Foundation | Docker, CI, project structure, base classes | ✅ Critical |
+| 1 | Data Layer + Migrations | Models, repositories, Alembic migrations | ✅ Critical |
+| 2 | Auth & Users | Registration, login, JWT, user management | ✅ Critical |
+| 3 | Subscriptions | Tariff plans, subscription lifecycle | ✅ Critical |
+| 4 | Payments | Invoice, PayPal/Stripe integration | ✅ Critical |
+| 5 | Admin & Webhooks | Admin API, webhook handlers | ✅ Critical |
+| 6 | Event System | Event bus, domain events, handlers | 🔥 High Priority |
+| 7 | Event Handlers - Core | User, subscription, payment events | 🔥 High Priority |
+| 8 | Integration Testing | End-to-end workflow tests, concurrency | ⚠️ Required |
+| 9 | Documentation | API docs, deployment guides, plugin dev | 📚 Required |
+
+**Timeline:** 12 weeks (3 months) to CE v1.0 launch
+
+### Phase 2: Plugin System Extensions (Post-Launch)
+
+These features will be implemented as **plugins** using the plugin architecture from Sprint 0.
+
+| Plugin | Focus | Key Deliverables | Timeline |
+|--------|-------|------------------|----------|
+| Booking Plugin | Venue scheduling | Room, Timeslot, Booking models & API | Q2 2026 |
+| Ticketing Plugin | Event management | Event, Ticket, TicketScan models & API | Q2 2026 |
+| Medical Screening Plugin | AI-powered diagnostics | Image upload, GPT analysis, HIPAA compliance | Q3 2026 |
+| Analytics Plugin | MRR tracking | Revenue analytics, churn analysis, cohort reports | Q3 2026 |
+| Multi-Currency Plugin | International support | Currency conversion, regional pricing, VAT handling | Q4 2026 |
+
+**Why Plugins:**
+- Core platform launches faster (focus on critical features)
+- Modular architecture allows easy extension
+- Customers pay only for features they need
+- Third-party developers can build plugins
+- Revenue opportunity: $299-$1,999 per plugin
 
 ---
 
@@ -234,29 +257,49 @@ python/api/
 
 ## Sprint Documents
 
-### Core Platform
-- [Sprint 0: Foundation](./sprint-0-foundation.md)
-- [Sprint 1: Data Layer](./sprint-1-data-layer.md)
-- [Sprint 2: Auth & Users](./sprint-2-auth-users.md)
-- [Sprint 3: Subscriptions](./sprint-3-subscriptions.md)
-- [Sprint 4: Payments](./sprint-4-payments.md)
-- [Sprint 5: Admin & Webhooks](./sprint-5-admin-webhooks.md)
+### Phase 1: CE Core (Critical Path to Launch)
 
-### Booking System
-- [Sprint 6: Booking Models & Services](./sprint-6-booking-models.md)
-- [Sprint 7: Booking API Routes](./sprint-7-booking-api.md)
+**Foundation & Data:**
+- [Sprint 0: Foundation](./sprint-0-foundation.md) - Docker, CI, project structure, plugin system
+- [Sprint 1: Data Layer + Migrations](./sprint-1-data-layer.md) - Models, repositories, Alembic
 
-### Ticket System
-- [Sprint 8: Ticket Models & Services](./sprint-8-ticket-models.md)
-- [Sprint 9: Ticket API Routes](./sprint-9-ticket-api.md)
+**Business Logic:**
+- [Sprint 2: Auth & Users](./sprint-2-auth-users.md) - Registration, login, JWT
+- [Sprint 3: Subscriptions](./sprint-3-subscriptions.md) - Tariff plans, subscription lifecycle
+- [Sprint 4: Payments](./sprint-4-payments.md) - Invoice, PayPal/Stripe integration
+- [Sprint 5: Admin & Webhooks](./sprint-5-admin-webhooks.md) - Admin API, webhook handlers
+
+**Event-Driven Architecture:**
+- [Sprint 6: Event System](./sprint-6-event-system.md) - Event bus, domain events, handlers
+- [Sprint 7: Event Handlers - Core](./sprint-7-event-handlers-core.md) - User, subscription, payment events
+
+**Quality & Launch:**
+- [Sprint 8: Integration Testing](./sprint-8-integration-testing.md) - End-to-end tests, concurrency
+- [Sprint 9: Documentation & Deployment](./sprint-9-documentation.md) - API docs, deployment guides
+
+### Phase 2: Plugin Extensions (Post-Launch)
+
+**Venue Operations (VBWD Venue):**
+- [Booking Plugin Spec](./plugin-booking-system.md) - Room, Timeslot, Booking models & API
+- [Ticketing Plugin Spec](./plugin-ticket-system.md) - Event, Ticket, TicketScan models & API
+
+**Advanced Features:**
+- [Medical Screening Plugin Spec](./plugin-medical-screening.md) - AI-powered image analysis
+- [Analytics Plugin Spec](./plugin-analytics.md) - MRR tracking, churn analysis
+- [Multi-Currency Plugin Spec](./plugin-multi-currency.md) - Currency conversion, regional pricing
 
 ### Related PlantUML Diagrams
+
+**Core Platform:**
+- [Data Model](../puml/data-model.puml)
+- [System Architecture](../puml/system-architecture.puml)
+- [Event-Driven Architecture](../puml/event-driven-architecture.puml)
+
+**Plugins (Future):**
 - [Booking Data Model](../puml/booking-data-model.puml)
 - [Booking Flow](../puml/booking-flow.puml)
-- [Booking Lifecycle](../puml/booking-lifecycle.puml)
 - [Ticket Data Model](../puml/ticket-data-model.puml)
 - [Ticket Flow](../puml/ticket-flow.puml)
-- [Ticket Lifecycle](../puml/ticket-lifecycle.puml)
 
 ---
 

@@ -66,11 +66,11 @@ package "Frontend Applications" {
         }
 
         package "Composables" {
-            [Composables] as Composables
+            [Vue Composables] as ComposablesImpl
         }
 
         package "Types" {
-            [Common Types] as Types
+            [Common Types] as TypesImpl
         }
     }
 }

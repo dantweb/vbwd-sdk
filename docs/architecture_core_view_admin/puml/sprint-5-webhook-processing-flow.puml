@@ -1,0 +1,289 @@
+@startuml sprint-5-webhook-processing-flow
+!theme plain
+title Sprint 5: Webhook Processing & Monitoring Flow
+
+|Payment Provider|
+start
+note right
+    **Trigger Event:**
+    - Payment succeeded
+    - Subscription created
+    - Invoice paid
+    - Refund processed
+end note
+
+:Payment event occurs;
+:Generate webhook payload;
+
+|Backend API (Webhook Endpoint)|
+:Receive webhook POST;
+:POST /webhooks/stripe;
+note right
+    **Request:**
+    Headers:
+    - Stripe-Signature: xxx
+    - Content-Type: application/json
+
+    Body:
+    {
+      "id": "evt_xxx",
+      "type": "payment_intent.succeeded",
+      "data": { ... }
+    }
+end note
+
+partition "Webhook Processing" {
+    |Backend|
+    :Verify webhook signature;
+    note right
+        **Security:**
+        - HMAC SHA256 verification
+        - Compare signatures
+        - Prevent replay attacks
+        - Validate timestamp
+    end note
+
+    if (Signature valid?) then (yes)
+        :Create webhook_log record;
+        note right
+            **Database Insert:**
+            ```sql
+            INSERT INTO webhook_logs (
+              event_type,
+              provider,
+              status,
+              url,
+              request_headers,
+              request_body,
+              created_at
+            ) VALUES (
+              'payment.succeeded',
+              'stripe',
+              'pending',
+              '/webhooks/stripe',
+              {...},
+              {...},
+              NOW()
+            )
+            ```
+
+            **Initial Status:** pending
+        end note
+
+        :status = 'pending';
+
+        :Process webhook event;
+
+        if (Event type) then (payment.succeeded)
+            :Update payment record;
+            :Update subscription status;
+            :Send confirmation email;
+        else (subscription.cancelled)
+            :Update subscription status;
+            :Calculate refund if needed;
+            :Send cancellation email;
+        else (invoice.paid)
+            :Mark invoice as paid;
+            :Generate receipt;
+            :Send receipt email;
+        else (refund.created)
+            :Update payment refund amount;
+            :Send refund notification;
+        endif
+
+        if (Processing successful?) then (yes)
+            :Update webhook_log;
+            note right
+                ```sql
+                UPDATE webhook_logs SET
+                  status = 'delivered',
+                  response_status = 200,
+                  response_body = {...},
+                  delivered_at = NOW()
+                WHERE id = log_id
+                ```
+            end note
+            :status = 'delivered';
+            :Return 200 OK;
+
+            |Payment Provider|
+            :Mark webhook delivered;
+            stop
+
+        else (processing failed)
+            :Update webhook_log;
+            note right
+                ```sql
+                UPDATE webhook_logs SET
+                  status = 'failed',
+                  error_message = '...',
+                  retry_count = 0,
+                  next_retry_at = NOW() + INTERVAL '5 minutes'
+                WHERE id = log_id
+                ```
+            end note
+            :status = 'failed';
+            :Schedule retry;
+            :Return 500 Error;
+
+            |Payment Provider|
+            :Schedule automatic retry;
+            note right
+                **Retry Strategy:**
+                - Attempt 1: After 5 min
+                - Attempt 2: After 15 min
+                - Attempt 3: After 1 hour
+                - Attempt 4: After 6 hours
+                - Max 4 attempts
+
+                **Exponential Backoff**
+            end note
+        endif
+
+    else (invalid signature)
+        :Log security event;
+        :Return 401 Unauthorized;
+
+        |Payment Provider|
+        :Mark as invalid;
+        stop
+    endif
+}
+
+note bottom
+    **Admin Monitoring & Retry:**
+
+    |Admin|
+    :Open Webhook Log;
+
+    |WebhookLogView|
+    :Display failed webhooks;
+
+    |Admin|
+    :Click "Retry" on failed webhook;
+
+    |webhookStore|
+    :retryWebhook(webhookId);
+
+    |WebhookService|
+    :POST /api/v1/admin/webhooks/:id/retry;
+
+    |Backend|
+    :Load webhook_log record;
+    :Increment retry_count;
+    :Update status = 'retrying';
+    :Re-process webhook event;
+
+    if (Retry successful?) then (yes)
+        :status = 'delivered';
+        :Clear next_retry_at;
+    else (failed again)
+        :status = 'failed';
+        :Schedule next retry;
+    endif
+
+    |WebhookLogView|
+    :Update status badge;
+    :Show retry count;
+end note
+
+note right
+    **Service Architecture (DI):**
+
+    ```typescript
+    class WebhookService implements IWebhookService {
+      constructor(private apiClient: IApiClient) {}
+
+      async retryWebhook(id: number): Promise<WebhookLog> {
+        // SRP: Only API call
+        return await this.apiClient.post(
+          `/api/v1/admin/webhooks/${id}/retry`
+        )
+      }
+
+      async getWebhookLogs(
+        params: GetWebhookLogsParams
+      ): Promise<PaginatedResponse<WebhookLog>> {
+        return await this.apiClient.get(
+          '/api/v1/admin/webhooks',
+          { params }
+        )
+      }
+    }
+    ```
+
+    **SOLID Compliance:**
+    - **SRP**: Service only handles API calls
+    - **OCP**: Can extend with new webhook types
+    - **LSP**: IWebhookService interface
+    - **ISP**: Specific webhook operations
+    - **DI**: ApiClient injected
+
+    **Clean Code:**
+    - Clear method names
+    - Type-safe parameters
+    - Single responsibility
+end note
+
+note left
+    **Webhook Log Filter UI:**
+
+    Admin can filter by:
+    - Status (pending, delivered, failed)
+    - Event Type (payment.*, subscription.*)
+    - Provider (Stripe, PayPal)
+    - Date Range
+
+    **View Webhook Details:**
+    - Request headers & body
+    - Response headers & body
+    - Error message (if failed)
+    - Retry count
+    - Next retry timestamp
+
+    **Actions:**
+    - Retry failed webhook
+    - View raw JSON
+    - Copy webhook ID
+    - Export webhook logs
+end note
+
+note right of Backend
+    **Database Schema:**
+
+    ```sql
+    CREATE TABLE webhook_logs (
+      id SERIAL PRIMARY KEY,
+      event_type VARCHAR(100) NOT NULL,
+      provider VARCHAR(50) NOT NULL,
+      status VARCHAR(20) NOT NULL,
+      url VARCHAR(255) NOT NULL,
+      http_method VARCHAR(10) DEFAULT 'POST',
+      request_headers JSONB,
+      request_body JSONB,
+      response_status INTEGER,
+      response_headers JSONB,
+      response_body JSONB,
+      error_message TEXT,
+      retry_count INTEGER DEFAULT 0,
+      next_retry_at TIMESTAMP,
+      delivered_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX idx_webhook_status
+      ON webhook_logs(status);
+    CREATE INDEX idx_webhook_created
+      ON webhook_logs(created_at DESC);
+    CREATE INDEX idx_webhook_provider
+      ON webhook_logs(provider);
+    ```
+
+    **PostgreSQL Features:**
+    - JSONB for flexible storage
+    - Indexes for fast filtering
+    - Timestamp handling
+end note
+
+@enduml

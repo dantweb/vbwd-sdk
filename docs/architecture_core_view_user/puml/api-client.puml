@@ -53,7 +53,7 @@ package "HTTP Client" #E8F5E9 {
 }
 
 package "Storage" #F3E5F5 {
-    [LocalStorage] as Storage
+    [LocalStorage] as StorageImpl
 }
 
 package "Error Handling" #FFEBEE {

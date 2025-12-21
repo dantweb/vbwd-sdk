@@ -1,0 +1,121 @@
+@startuml sprint-1-user-suspend-flow
+!theme plain
+title Sprint 1: User Suspend Flow (TDD Example)
+
+|Admin|
+start
+:Navigate to user details;
+
+|Vue Component|
+:Display user info;
+:Show "Suspend User" button;
+
+|Admin|
+:Click "Suspend User";
+
+|Composable (useUserDetails)|
+:Call suspendUser(userId);
+note right
+    **Clean Code**
+    Small function
+    Single responsibility
+end note
+
+|Store (userManagementStore)|
+:Call updateUserStatus(id, 'suspended');
+note right
+    **State Management**
+    - Set loading = true
+    - Clear previous errors
+end note
+
+|Service (UserService)|
+:Validate status parameter;
+note right
+    **TDD Step 1: RED**
+    Test written first:
+    expect(service.updateUserStatus(1, 'suspended'))
+      .resolves.toHaveProperty('status', 'suspended')
+end note
+
+if (Valid status?) then (yes)
+    |IApiClient|
+    :PUT /api/v1/admin/users/1/status;
+    :{ status: "suspended" };
+
+    |Backend API|
+    :Update user.status = 'suspended';
+    :Log admin action;
+    :Return updated user;
+
+    |IApiClient|
+    :Receive response;
+
+    |Service|
+    :Return User object;
+    note right
+        **TDD Step 2: GREEN**
+        Implementation passes test
+    end note
+
+    |Store|
+    :Update user in users[];
+    :Update selectedUser;
+    :Set loading = false;
+
+    |Composable|
+    :Return success;
+
+    |Vue Component|
+    :Show success toast;
+    :Update UI (status badge);
+    note right
+        **Clean Code**
+        - Immediate feedback
+        - Clear messaging
+    end note
+
+    |Admin|
+    :See "Suspended" status;
+    stop
+else (no)
+    |Service|
+    :Throw validation error;
+    note right
+        **Error Handling**
+        Clear error messages
+    end note
+
+    |Store|
+    :Set error message;
+    :Set loading = false;
+
+    |Vue Component|
+    :Display error toast;
+
+    |Admin|
+    :See error message;
+    stop
+endif
+
+note right
+    **SOLID Principles Applied:**
+
+    **SRP**: Each layer has single responsibility
+    - Composable: Business logic
+    - Store: State management
+    - Service: API communication
+
+    **DI**: Service injected into store
+    store.setUserService(userService)
+
+    **LSP**: IUserService interface
+    Any implementation can be used
+
+    **Clean Code**:
+    - Descriptive function names
+    - Clear error messages
+    - Immediate user feedback
+end note
+
+@enduml

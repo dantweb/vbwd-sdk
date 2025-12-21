@@ -1,0 +1,359 @@
+@startuml event-system-architecture
+!theme plain
+title Core SDK - Frontend Event System Architecture
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+package "Frontend (Vue.js Applications)" {
+
+    package "User App" #E3F2FD {
+        component "Wizard Plugin" as WizardPlugin
+        component "User Cabinet" as CabinetPlugin
+    }
+
+    package "Admin App" #FFF3E0 {
+        component "User Management" as UserMgmt
+        component "Plan Management" as PlanMgmt
+        component "Analytics" as Analytics
+    }
+
+    package "Core SDK (@vbwd/core-sdk)" #E8F5E9 {
+
+        package "Event System" {
+            interface "IEventBus" as IEventBus <<interface>>
+            component "EventBus" as EventBusImpl
+
+            note right of IEventBus
+                **Event Bus Interface (LSP):**
+                + emit(event: string, payload: any): void
+                + on(event: string, handler: Function): void
+                + off(event: string, handler: Function): void
+                + once(event: string, handler: Function): void
+
+                **Purpose:**
+                Decouples components via
+                publish-subscribe pattern
+            end note
+
+            note right of EventBusImpl
+                **Implementation:**
+                ```typescript
+                class EventBus implements IEventBus {
+                  private listeners = new Map<string, Set<Function>>()
+
+                  emit(event: string, payload: any) {
+                    const handlers = this.listeners.get(event)
+                    if (handlers) {
+                      handlers.forEach(handler => handler(payload))
+                    }
+                  }
+
+                  on(event: string, handler: Function) {
+                    if (!this.listeners.has(event)) {
+                      this.listeners.set(event, new Set())
+                    }
+                    this.listeners.get(event).add(handler)
+                  }
+
+                  off(event: string, handler: Function) {
+                    this.listeners.get(event)?.delete(handler)
+                  }
+                }
+                ```
+
+                **Clean Code:**
+                - Clear method names
+                - Type-safe
+                - Memory-efficient (Set)
+            end note
+
+            IEventBus <|.. EventBusImpl : implements
+        }
+
+        package "API Client" {
+            interface "IApiClient" as IApiClient <<interface>>
+            component "ApiClient" as ApiClientImpl
+
+            note right of ApiClientImpl
+                **Event-Driven API Client:**
+
+                ```typescript
+                class ApiClient implements IApiClient {
+                  constructor(
+                    private eventBus: IEventBus
+                  ) {}
+
+                  async post<T>(url: string, data: any): Promise<T> {
+                    // Emit event BEFORE request
+                    this.eventBus.emit('api:request:start', {
+                      url, method: 'POST', data
+                    })
+
+                    try {
+                      const response = await axios.post(url, data)
+
+                      // Emit event AFTER success
+                      this.eventBus.emit('api:request:success', {
+                        url, method: 'POST', response
+                      })
+
+                      return response.data
+                    } catch (error) {
+                      // Emit event on error
+                      this.eventBus.emit('api:request:error', {
+                        url, method: 'POST', error
+                      })
+                      throw error
+                    }
+                  }
+                }
+                ```
+
+                **DI:** EventBus injected via constructor
+            end note
+
+            IApiClient <|.. ApiClientImpl : implements
+        }
+
+        package "Services" {
+            component "UserService" as UserSvc
+            component "PlanService" as PlanSvc
+
+            note bottom of UserSvc
+                **Event-Driven Service:**
+
+                ```typescript
+                class UserService {
+                  constructor(
+                    private apiClient: IApiClient,
+                    private eventBus: IEventBus
+                  ) {
+                    // Listen to domain events
+                    this.setupEventListeners()
+                  }
+
+                  private setupEventListeners() {
+                    this.eventBus.on('user:suspend',
+                      (userId) => this.handleSuspend(userId)
+                    )
+                  }
+
+                  async updateUserStatus(id: number, status: string) {
+                    // Emit domain event BEFORE API call
+                    this.eventBus.emit('user:status:changing', {
+                      userId: id,
+                      oldStatus: 'active',
+                      newStatus: status
+                    })
+
+                    const user = await this.apiClient.put(
+                      `/api/v1/admin/users/${id}/status`,
+                      { status }
+                    )
+
+                    // Emit domain event AFTER success
+                    this.eventBus.emit('user:status:changed', {
+                      userId: id,
+                      status: user.status
+                    })
+
+                    return user
+                  }
+                }
+                ```
+
+                **Benefits:**
+                - Decoupled logic
+                - Easy to test
+                - Audit trail
+                - Real-time updates
+            end note
+        }
+
+        package "Event Types" {
+            component "events.ts" as Events
+
+            note right of Events
+                **Centralized Event Types:**
+
+                ```typescript
+                // API Events
+                export const API_EVENTS = {
+                  REQUEST_START: 'api:request:start',
+                  REQUEST_SUCCESS: 'api:request:success',
+                  REQUEST_ERROR: 'api:request:error'
+                }
+
+                // Domain Events - User
+                export const USER_EVENTS = {
+                  CREATED: 'user:created',
+                  UPDATED: 'user:updated',
+                  STATUS_CHANGING: 'user:status:changing',
+                  STATUS_CHANGED: 'user:status:changed',
+                  SUSPENDED: 'user:suspended',
+                  DELETED: 'user:deleted'
+                }
+
+                // Domain Events - Subscription
+                export const SUBSCRIPTION_EVENTS = {
+                  CREATED: 'subscription:created',
+                  CANCELLED: 'subscription:cancelled',
+                  PAYMENT_FAILED: 'subscription:payment:failed',
+                  RENEWED: 'subscription:renewed'
+                }
+
+                // UI Events
+                export const UI_EVENTS = {
+                  TOAST_SHOW: 'ui:toast:show',
+                  MODAL_OPEN: 'ui:modal:open',
+                  MODAL_CLOSE: 'ui:modal:close'
+                }
+                ```
+
+                **Type Safety:**
+                String constants prevent typos
+            end note
+        }
+    }
+}
+
+package "Backend API (Flask)" #FFEBEE {
+    component "Flask Routes" as Routes
+    component "Event Dispatcher" as Dispatcher
+    component "Event Handlers" as Handlers
+    component "Services & Factories" as Services
+}
+
+' Frontend connections
+WizardPlugin ..> EventBusImpl : emits/listens
+CabinetPlugin ..> EventBusImpl : emits/listens
+UserMgmt ..> EventBusImpl : emits/listens
+PlanMgmt ..> EventBusImpl : emits/listens
+Analytics ..> EventBusImpl : emits/listens
+
+UserSvc ..> EventBusImpl : emits/listens
+PlanSvc ..> EventBusImpl : emits/listens
+
+ApiClientImpl --> EventBusImpl : emits events
+UserSvc --> ApiClientImpl : uses
+PlanSvc --> ApiClientImpl : uses
+
+UserSvc ..> Events : imports
+ApiClientImpl ..> Events : imports
+
+' Backend connection
+ApiClientImpl --> Routes : HTTP/HTTPS
+Routes --> Dispatcher : triggers events
+Dispatcher --> Handlers : dispatches to
+Handlers --> Services : uses
+
+note bottom
+    **Event Flow Example: Suspend User**
+
+    1. **Admin Action:**
+       Admin clicks "Suspend User" button
+
+    2. **Component emits UI event:**
+       eventBus.emit('user:suspend:requested', { userId: 123 })
+
+    3. **Composable listens & calls service:**
+       useUserDetails.suspendUser(123)
+
+    4. **Service emits domain event:**
+       eventBus.emit('user:status:changing', { userId: 123, newStatus: 'suspended' })
+
+    5. **Service makes API call:**
+       apiClient.put('/api/v1/admin/users/123/status', { status: 'suspended' })
+
+    6. **ApiClient emits API event:**
+       eventBus.emit('api:request:start', { url: '...', method: 'PUT' })
+
+    7. **Backend receives request:**
+       Flask route: PUT /api/v1/admin/users/<id>/status
+
+    8. **Route triggers backend event:**
+       event_dispatcher.emit('user.status.update_requested', { user_id: 123, status: 'suspended' })
+
+    9. **Event handler processes:**
+       UserStatusUpdateHandler.handle(event)
+
+    10. **Handler uses services:**
+        - UserService.update_status(123, 'suspended')
+        - AuditLogService.log_action(admin_id, 'user_suspend', 123)
+        - NotificationService.notify_user(123, 'account_suspended')
+
+    11. **Backend emits result event:**
+        event_dispatcher.emit('user.status.updated', { user_id: 123, status: 'suspended' })
+
+    12. **Response returns to frontend:**
+        API returns updated user object
+
+    13. **ApiClient emits success event:**
+        eventBus.emit('api:request:success', { response: {...} })
+
+    14. **Service emits domain event:**
+        eventBus.emit('user:status:changed', { userId: 123, status: 'suspended' })
+
+    15. **Multiple listeners react:**
+        - Store updates user in state
+        - UI shows success toast
+        - Activity log refreshes
+        - Analytics updates metrics
+end note
+
+note right of EventBusImpl
+    **Testing with Events:**
+
+    ```typescript
+    describe('UserService', () => {
+      it('should emit event on status change', async () => {
+        // Arrange
+        const mockEventBus = {
+          emit: vi.fn(),
+          on: vi.fn()
+        }
+        const service = new UserService(mockApi, mockEventBus)
+
+        // Act
+        await service.updateUserStatus(123, 'suspended')
+
+        // Assert
+        expect(mockEventBus.emit).toHaveBeenCalledWith(
+          'user:status:changed',
+          { userId: 123, status: 'suspended' }
+        )
+      })
+
+      it('should listen to user:suspend event', () => {
+        const mockEventBus = {
+          emit: vi.fn(),
+          on: vi.fn()
+        }
+        new UserService(mockApi, mockEventBus)
+
+        expect(mockEventBus.on).toHaveBeenCalledWith(
+          'user:suspend',
+          expect.any(Function)
+        )
+      })
+    })
+    ```
+
+    **TDD Benefits:**
+    - Easy to test event emission
+    - Easy to test event handling
+    - No HTTP calls in tests
+end note
+
+note top of IEventBus
+    **SOLID Principles:**
+
+    **SRP:** EventBus only manages subscriptions
+    **OCP:** New events can be added without changes
+    **LSP:** IEventBus can be substituted (MockEventBus)
+    **ISP:** Focused interface (emit, on, off)
+    **DI:** EventBus injected into services
+end note
+
+@enduml

@@ -1,0 +1,227 @@
+@startuml sprint-2-plan-management-architecture
+!theme plain
+title Sprint 2: Plan Management Plugin - Architecture with DI
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+package "Plan Management Plugin" {
+
+    package "Views Layer" #E3F2FD {
+        component "PlanListView" as ListView
+        component "PlanEditorView" as EditorView
+
+        package "Components" {
+            component "PlanCard"
+            component "PlanForm"
+            component "PricingEditor"
+            component "FeatureEditor"
+        }
+
+        ListView --> PlanCard
+        EditorView --> PlanForm
+        PlanForm --> PricingEditor
+        PlanForm --> FeatureEditor
+    }
+
+    package "Composables Layer" #F3E5F5 {
+        component "usePlanList" as ListComp
+        component "usePlanEditor" as EditorComp
+
+        note right of ListComp
+            **SRP Principle**
+            Responsibilities:
+            - Pagination logic
+            - Filter management
+            - Sort handling
+            - Load plans
+
+            Does NOT:
+            - Make API calls directly
+            - Manage global state
+        end note
+
+        note right of EditorComp
+            **SRP Principle**
+            Responsibilities:
+            - Form validation
+            - Save/update logic
+            - Provider sync
+
+            Does NOT:
+            - Handle API details
+            - Manage HTTP errors
+        end note
+    }
+
+    package "Store Layer (Pinia)" #FFF3E0 {
+        component "planManagementStore" as Store
+
+        note right of Store
+            **State:**
+            - plans: TariffPlan[]
+            - selectedPlan: TariffPlan | null
+            - loading: boolean
+            - error: string | null
+            - planService: IPlanService | null
+
+            **DI via Setter:**
+            setPlanService(service: IPlanService)
+
+            **Actions delegate to service:**
+            - fetchPlans() → service.getPlans()
+            - createPlan() → service.createPlan()
+            - updatePlan() → service.updatePlan()
+        end note
+    }
+
+    package "Service Layer" #E8F5E9 {
+        interface "IPlanService" as IService <<interface>>
+        component "PlanService" as ServiceImpl
+
+        note right of IService
+            **LSP - Liskov Substitution**
+            Interface defines contract:
+
+            + getPlans(params): Promise<PaginatedResponse>
+            + getPlanById(id): Promise<TariffPlan>
+            + createPlan(data): Promise<TariffPlan>
+            + updatePlan(id, data): Promise<TariffPlan>
+            + updatePlanStatus(id, status): Promise<TariffPlan>
+            + syncPlanWithProvider(id, provider): Promise<TariffPlan>
+
+            Any implementation must fulfill
+            this contract
+        end note
+
+        note bottom of ServiceImpl
+            **DI via Constructor:**
+            constructor(apiClient: IApiClient) {
+              this.apiClient = apiClient
+            }
+
+            **SRP**: Only handles API communication
+            - Validates input
+            - Makes HTTP calls
+            - Returns typed responses
+            - Does NOT manage state
+        end note
+
+        IService <|.. ServiceImpl : implements
+    }
+
+    package "Types" #FFFDE7 {
+        component "TariffPlan.ts" as Types
+        component "Pricing.ts"
+        component "PlanFeature.ts"
+
+        note right of Types
+            Domain Models:
+            - TariffPlan
+            - PlanType
+            - BillingPeriod
+            - PlanPricing
+            - PlanLimits
+            - Currency
+
+            Clean separation
+            of concerns
+        end note
+    }
+}
+
+package "Core SDK" #E1F5FE {
+    interface "IApiClient" as ApiClient <<interface>>
+
+    note right of ApiClient
+        **Shared Dependency**
+        Provides:
+        - get<T>(url, config)
+        - post<T>(url, data, config)
+        - put<T>(url, data, config)
+        - delete(url, config)
+
+        Handles:
+        - Auth tokens
+        - Request/response interceptors
+        - Error normalization
+    end note
+}
+
+package "Backend API" #FFEBEE {
+    component "/api/v1/admin/plans" as API
+
+    note right of API
+        Endpoints:
+        - GET /plans (list)
+        - GET /plans/:id
+        - POST /plans
+        - PUT /plans/:id
+        - PUT /plans/:id/status
+        - POST /plans/:id/sync/:provider
+    end note
+}
+
+' View → Composable
+ListView ..> ListComp : uses
+EditorView ..> EditorComp : uses
+
+' Composable → Store
+ListComp ..> Store : const store =\nusePlanManagementStore()
+EditorComp ..> Store : const store =\nusePlanManagementStore()
+
+' Store → Service (DI)
+Store --> IService : injected\nplanService
+ServiceImpl .up.|> IService
+
+' Service → ApiClient (DI)
+ServiceImpl --> ApiClient : injected\napiClient
+
+' ApiClient → Backend
+ApiClient --> API : HTTP/HTTPS
+
+' Type dependencies
+ServiceImpl ..> Types : uses
+Store ..> Types : uses
+ListComp ..> Types : uses
+EditorComp ..> Types : uses
+
+note bottom
+    **Dependency Injection Flow:**
+
+    1. **Bootstrap (main.ts)**:
+       const apiClient = createApiClient(...)
+       const planService = new PlanService(apiClient)  // DI via constructor
+       app.provide('planService', planService)
+
+    2. **Plugin Init**:
+       const store = usePlanManagementStore()
+       store.setPlanService(planService)  // DI via setter
+
+    3. **Runtime**:
+       Composables → Store → Service → ApiClient → Backend
+
+    **Benefits:**
+    - Easy to test (mock dependencies)
+    - Loose coupling
+    - LSP compliance
+    - Can swap implementations
+end note
+
+note top of Store
+    **Testing with DI:**
+
+    const mockPlanService = {
+      getPlans: vi.fn(),
+      createPlan: vi.fn(),
+      // ... other methods
+    }
+
+    store.setPlanService(mockPlanService)
+
+    // Now test store without real API
+    await store.fetchPlans()
+    expect(mockPlanService.getPlans).toHaveBeenCalled()
+end note
+
+@enduml

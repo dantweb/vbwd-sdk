@@ -1,0 +1,371 @@
+@startuml sprint-4-metrics-calculation-flow
+!theme plain
+title Sprint 4: Revenue Metrics Calculation Flow
+
+|Admin|
+start
+:Open Analytics Dashboard;
+
+|AnalyticsOverview.vue|
+:Mount component;
+
+|useAnalyticsDashboard (Composable)|
+:onMounted() hook;
+:Set default date range (last 30 days);
+:loadOverview();
+
+|analyticsStore|
+:fetchOverview(dateParams);
+:Set loading = true;
+
+|AnalyticsService|
+:validateDateRange(params);
+
+if (Valid dates?) then (yes)
+    |AnalyticsService|
+    :GET /api/v1/admin/analytics/overview;
+    :params: { startDate, endDate, compareWith };
+
+    |Backend API|
+    :Parse date range;
+    note right
+        **Request:**
+        {
+          startDate: "2025-11-20",
+          endDate: "2025-12-20",
+          compareWith: "previous_period"
+        }
+
+        **Comparison Period Calculation:**
+        Current: 2025-11-20 to 2025-12-20 (30 days)
+        Previous: 2025-10-21 to 2025-11-19 (30 days)
+    end note
+
+    partition "Calculate MRR (Monthly Recurring Revenue)" {
+        |Backend|
+        :Query active subscriptions;
+        note right
+            ```sql
+            SELECT
+              SUM(
+                CASE
+                  WHEN billing_period = 'monthly' THEN amount
+                  WHEN billing_period = 'yearly' THEN amount / 12
+                  WHEN billing_period = 'lifetime' THEN 0
+                END
+              ) as mrr
+            FROM subscriptions s
+            JOIN plan_pricing pp ON s.plan_id = pp.plan_id
+            WHERE s.status = 'active'
+              AND s.created_at <= :endDate
+              AND (s.cancelled_at IS NULL OR s.cancelled_at > :endDate)
+            ```
+
+            **Clean Code:**
+            - Clear SQL logic
+            - Normalized to monthly
+            - Date range handling
+        end note
+
+        :Calculate current period MRR;
+        :mrr_current = $5,000;
+
+        :Calculate previous period MRR;
+        :mrr_previous = $4,500;
+
+        :Calculate growth rate;
+        note right
+            **Formula:**
+            growth_rate = ((current - previous) / previous) * 100
+            growth_rate = ((5000 - 4500) / 4500) * 100
+            growth_rate = 11.11%
+        end note
+        :growth_rate = 11.11%;
+    }
+
+    partition "Calculate ARR (Annual Recurring Revenue)" {
+        |Backend|
+        :ARR = MRR × 12;
+        :arr_current = $5,000 × 12 = $60,000;
+        :arr_previous = $4,500 × 12 = $54,000;
+    }
+
+    partition "Calculate Total Revenue" {
+        |Backend|
+        :Query all payments in period;
+        note right
+            ```sql
+            SELECT SUM(amount) as total_revenue
+            FROM payments
+            WHERE status = 'succeeded'
+              AND created_at >= :startDate
+              AND created_at <= :endDate
+            ```
+        end note
+        :total_revenue = $10,500;
+    }
+
+    partition "Calculate ARPU (Average Revenue Per User)" {
+        |Backend|
+        :Count active users;
+        :active_users = 100;
+        :arpu = total_revenue / active_users;
+        :arpu = $10,500 / 100 = $105;
+    }
+
+    partition "Calculate Subscription Metrics" {
+        |Backend|
+        :Count active subscriptions;
+        :active_subs = 85;
+
+        :Count new subscriptions;
+        note right
+            ```sql
+            SELECT COUNT(*) as new_subs
+            FROM subscriptions
+            WHERE created_at >= :startDate
+              AND created_at <= :endDate
+            ```
+        end note
+        :new_subs = 15;
+
+        :Count cancelled subscriptions;
+        :cancelled_subs = 5;
+
+        :Calculate churn rate;
+        note right
+            **Formula:**
+            churn_rate = (cancelled / total_at_start) * 100
+            churn_rate = (5 / 85) * 100
+            churn_rate = 5.88%
+
+            **Clean Code:**
+            - Clear metric definition
+            - Consistent calculation
+            - Percentage format
+        end note
+        :churn_rate = 5.88%;
+
+        :Calculate growth rate;
+        :growth_rate = ((new - cancelled) / total_at_start) * 100;
+        :growth_rate = 11.76%;
+    }
+
+    partition "Calculate User Metrics" {
+        |Backend|
+        :Count total users;
+        :total_users = 200;
+
+        :Count new users in period;
+        :new_users = 30;
+
+        :Calculate user growth;
+        :user_growth = 15%;
+    }
+
+    partition "Calculate Payment Metrics" {
+        |Backend|
+        :Query payment success rate;
+        note right
+            ```sql
+            SELECT
+              COUNT(*) as total_payments,
+              SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) as successful,
+              SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+            FROM payments
+            WHERE created_at >= :startDate
+              AND created_at <= :endDate
+            ```
+        end note
+        :total_payments = 500;
+        :successful = 485;
+        :failed = 15;
+        :success_rate = (485 / 500) * 100 = 97%;
+    }
+
+    |Backend API|
+    :Construct AnalyticsOverview;
+    note right
+        **Response Structure:**
+        ```json
+        {
+          "revenue": {
+            "mrr": 5000,
+            "arr": 60000,
+            "totalRevenue": 10500,
+            "averageRevenuePerUser": 105,
+            "revenueGrowthRate": 11.11,
+            "comparisonPeriod": {
+              "mrr": 4500,
+              "arr": 54000
+            }
+          },
+          "subscriptions": {
+            "activeSubscriptions": 85,
+            "newSubscriptions": 15,
+            "cancelledSubscriptions": 5,
+            "churnRate": 5.88,
+            "growthRate": 11.76
+          },
+          "users": {
+            "totalUsers": 200,
+            "newUsers": 30,
+            "userGrowthRate": 15
+          },
+          "payments": {
+            "totalPayments": 500,
+            "successfulPayments": 485,
+            "failedPayments": 15,
+            "successRate": 97
+          }
+        }
+        ```
+    end note
+    :Return JSON response;
+
+    |AnalyticsService|
+    :Parse response;
+    :Return AnalyticsOverview;
+
+    |analyticsStore|
+    :store.overview = response;
+    :Set loading = false;
+
+    |useAnalyticsDashboard|
+    :Compute growth indicators;
+    note right
+        **Getters (Computed):**
+        - mrrGrowth = +11.11%
+        - subscriptionGrowth = +11.76%
+        - userGrowth = +15%
+
+        **Reactive Updates:**
+        UI automatically updates
+        when store state changes
+    end note
+
+    |AnalyticsOverview.vue|
+    :Render metric cards;
+    :Display MRR: $5,000 (↑ 11.11%);
+    :Display Active Subs: 85 (↑ 11.76%);
+    :Display Total Users: 200 (↑ 15%);
+    :Display Payment Success: 97%;
+
+    |useChartData|
+    :Format time series data;
+    :Convert to Chart.js format;
+
+    |RevenueChart Component|
+    :Render line chart;
+    :Show MRR trend;
+
+    |Admin|
+    :View dashboard;
+    :See all metrics;
+    :See growth indicators;
+    :See trend charts;
+    stop
+
+else (invalid dates)
+    |AnalyticsService|
+    :Throw validation error;
+
+    |analyticsStore|
+    :Set error message;
+    :Set loading = false;
+
+    |AnalyticsOverview.vue|
+    :Display error toast;
+
+    |Admin|
+    :See error;
+    stop
+endif
+
+note bottom
+    **SOLID Principles in Metrics Calculation:**
+
+    **SRP - Single Responsibility:**
+    - Backend: Calculate metrics
+    - Service: API communication
+    - Store: State management
+    - Composable: Business logic
+    - Component: Presentation
+
+    **OCP - Open/Closed:**
+    Can add new metrics without
+    modifying existing calculation
+
+    **LSP - Liskov Substitution:**
+    IAnalyticsService can be mocked
+    for testing
+
+    **DI - Dependency Injection:**
+    Service injected into store
+
+    **Clean Code:**
+    - Clear metric names
+    - Consistent formulas
+    - Well-documented calculations
+    - Type-safe interfaces
+end note
+
+note right of Backend
+    **Database Performance:**
+
+    **Optimization Strategies:**
+    1. Index on date columns
+       (created_at, cancelled_at)
+    2. Index on status columns
+    3. Materialized views for
+       complex aggregations
+    4. Caching layer (Redis)
+       for frequently accessed metrics
+    5. Background jobs for
+       daily metric snapshots
+
+    **PostgreSQL Advantages:**
+    - Window functions for
+      period comparisons
+    - JSON aggregation
+    - Efficient date handling
+    - Concurrent query execution
+end note
+
+note right of analyticsStore
+    **Testing with TDD:**
+
+    ```typescript
+    describe('analyticsStore', () => {
+      it('should calculate MRR growth', async () => {
+        // Arrange
+        store.revenueMetrics = {
+          mrr: 5000,
+          comparisonPeriod: { mrr: 4500 }
+        }
+
+        // Act
+        const growth = store.mrrGrowth
+
+        // Assert
+        expect(growth).toBeCloseTo(11.11, 2)
+      })
+
+      it('should handle zero previous MRR', () => {
+        store.revenueMetrics = {
+          mrr: 5000,
+          comparisonPeriod: { mrr: 0 }
+        }
+
+        expect(store.mrrGrowth).toBe(100)
+      })
+    })
+    ```
+
+    **Clean Code:**
+    - Test covers edge cases
+    - Clear arrange-act-assert
+    - Descriptive test names
+end note
+
+@enduml

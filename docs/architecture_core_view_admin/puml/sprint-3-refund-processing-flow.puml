@@ -1,0 +1,309 @@
+@startuml sprint-3-refund-processing-flow
+!theme plain
+title Sprint 3: Refund Processing Flow with Validation
+
+|Admin|
+start
+:Navigate to invoice details;
+
+|InvoiceDetailsView|
+:Display invoice;
+:Show payment info;
+
+if (Invoice status == PAID?) then (yes)
+    :Show "Refund" button;
+
+    |Admin|
+    :Click "Refund" button;
+
+    |RefundModal Component|
+    :Display refund form;
+    :Show original amount;
+    :Input fields:
+    - Refund amount
+    - Reason
+    - Notify customer?;
+
+    |Admin|
+    :Enter refund amount ($14.99);
+    :Enter reason ("Partial service");
+    :Check "Notify customer";
+    :Click "Process Refund";
+
+    |RefundModal|
+    :Validate form;
+
+    if (Amount > 0 AND\nAmount <= original?) then (yes)
+        if (Reason provided?) then (yes)
+            |Vue Component|
+            :Call processRefund();
+
+            |Composable|
+            :Prepare RefundData;
+
+            |invoiceStore|
+            :processRefund(paymentId, data);
+            :Set loading = true;
+
+            |InvoiceService|
+            :validateRefundData(data);
+            note right
+                **TDD Validation Tests:**
+
+                it('should validate amount > 0', () => {
+                  expect(() => service.validateRefundData({
+                    amount: -10,
+                    reason: 'test'
+                  })).toThrow('amount must be > 0')
+                })
+
+                it('should validate reason exists', () => {
+                  expect(() => service.validateRefundData({
+                    amount: 10,
+                    reason: ''
+                  })).toThrow('reason is required')
+                })
+
+                **Clean Code:**
+                - Descriptive error messages
+                - Early validation
+                - Clear requirements
+            end note
+
+            if (Valid?) then (yes)
+                |InvoiceService|
+                :POST /api/v1/admin/payments/:id/refund;
+                :Send RefundData;
+
+                |Backend API|
+                :Load payment record;
+                :Check refund eligibility;
+
+                if (Already refunded?) then (yes)
+                    |Backend API|
+                    :Return 400 error;
+                    note right
+                        "Payment already refunded"
+                    end note
+                else (no)
+                    if (Amount > available?) then (yes)
+                        |Backend API|
+                        :Return 400 error;
+                        note right
+                            "Refund amount exceeds\navailable amount"
+                        end note
+                    else (no)
+                        |Backend API|
+                        :Call payment provider;
+
+                        if (Provider == Stripe) then (yes)
+                            |Stripe API|
+                            :Create refund;
+                            :stripe.refunds.create({
+                              payment_intent: pi_xxx,
+                              amount: 1499
+                            });
+                        else (PayPal)
+                            |PayPal API|
+                            :Capture refund;
+                            :paypal.payments.refund({
+                              capture_id: xxx,
+                              amount: 14.99
+                            });
+                        endif
+
+                        if (Provider success?) then (yes)
+                            |Backend API|
+                            :Update payment record;
+                            note right
+                                **Database Updates:**
+                                UPDATE payments SET
+                                  refunded_amount = 14.99,
+                                  status = 'partially_refunded'
+                                WHERE id = payment_id
+
+                                INSERT INTO refund_logs
+                                  (payment_id, amount, reason,
+                                   admin_id, created_at)
+                            end note
+
+                            if (Full refund?) then (yes)
+                                :Set status = 'refunded';
+                            else (partial)
+                                :Set status = 'partially_refunded';
+                            endif
+
+                            if (Notify customer?) then (yes)
+                                |Email Service|
+                                :Send refund notification;
+                                note right
+                                    **Email Template:**
+                                    Subject: Refund Processed
+                                    Body:
+                                    - Original amount
+                                    - Refund amount
+                                    - Reason
+                                    - Remaining balance
+                                end note
+                            endif
+
+                            |Backend API|
+                            :Return updated Payment;
+
+                            |InvoiceService|
+                            :Return Payment;
+
+                            |invoiceStore|
+                            :Update local state;
+                            :Set loading = false;
+
+                            |InvoiceDetailsView|
+                            :Close modal;
+                            :Show success toast;
+                            :Update payment status badge;
+
+                            |Admin|
+                            :See "Partially Refunded" status;
+                            :See refund amount ($14.99);
+                            stop
+
+                        else (provider failed)
+                            |Backend API|
+                            :Return provider error;
+                            note right
+                                Provider errors:
+                                - Insufficient funds
+                                - Invalid payment
+                                - API error
+                            end note
+                        endif
+                    endif
+                endif
+
+                |InvoiceService|
+                :Throw error;
+
+                |invoiceStore|
+                :Set error message;
+                :Set loading = false;
+
+                |RefundModal|
+                :Display error;
+
+                |Admin|
+                :See error message;
+                :Decide next action;
+                stop
+
+            else (invalid data)
+                |InvoiceService|
+                :Throw validation error;
+
+                |RefundModal|
+                :Display validation error;
+
+                |Admin|
+                :Fix validation errors;
+                stop
+            endif
+
+        else (no reason)
+            |RefundModal|
+            :Show "Reason required" error;
+            |Admin|
+            :Enter reason;
+            stop
+        endif
+
+    else (invalid amount)
+        |RefundModal|
+        :Show "Invalid amount" error;
+        |Admin|
+        :Fix amount;
+        stop
+    endif
+
+else (not paid)
+    :Hide "Refund" button;
+    note right
+        Refunds only available
+        for PAID invoices
+    end note
+    stop
+endif
+
+note bottom
+    **Service Architecture (DI):**
+
+    ```typescript
+    class InvoiceService implements IInvoiceService {
+      constructor(private apiClient: IApiClient) {}
+
+      async processRefund(paymentId: number, data: RefundData) {
+        // Validation (SRP)
+        this.validateRefundData(data)
+
+        // API call
+        return await this.apiClient.post(
+          `/api/v1/admin/payments/${paymentId}/refund`,
+          data
+        )
+      }
+
+      private validateRefundData(data: RefundData) {
+        if (!data.amount || data.amount <= 0) {
+          throw new Error('Refund amount must be > 0')
+        }
+        if (!data.reason || data.reason.trim().length === 0) {
+          throw new Error('Refund reason is required')
+        }
+      }
+    }
+    ```
+
+    **SOLID Compliance:**
+    - **SRP**: Service only handles API calls
+    - **OCP**: Can extend with new refund types
+    - **LSP**: IInvoiceService interface
+    - **ISP**: Specific refund interface
+    - **DI**: ApiClient injected
+
+    **Clean Code:**
+    - Small functions (<20 lines)
+    - Descriptive names
+    - Clear error messages
+    - Single responsibility per function
+end note
+
+note right of InvoiceService
+    **TDD Process:**
+
+    **1. RED - Write failing test:**
+    ```typescript
+    it('should process full refund', async () => {
+      mockApiClient.post.mockResolvedValue({
+        id: 1,
+        status: 'refunded',
+        refundedAmount: 29.99
+      })
+
+      const result = await service.processRefund(1, {
+        amount: 29.99,
+        reason: 'customer_request',
+        notifyCustomer: true
+      })
+
+      expect(result.status).toBe('refunded')
+    })
+    ```
+
+    **2. GREEN - Implement:**
+    (Implementation shown in note below)
+
+    **3. REFACTOR:**
+    - Extract validation
+    - Add error handling
+    - Improve naming
+end note
+
+@enduml

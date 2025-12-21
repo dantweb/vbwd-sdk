@@ -1,0 +1,213 @@
+@startuml sprint-2-plan-creation-flow
+!theme plain
+title Sprint 2: Plan Creation Flow with Multi-Currency Pricing
+
+|Admin|
+start
+:Navigate to /admin/plans/new;
+
+|PlanEditorView|
+:Render plan form;
+:Load available features;
+
+|usePlanEditor (Composable)|
+:loadAvailableFeatures();
+
+|planManagementStore|
+:fetchAvailableFeatures();
+
+|PlanService|
+:GET /api/v1/admin/plans/features;
+
+|Backend API|
+:Return feature list;
+
+|PlanEditorView|
+:Display empty form;
+
+|Admin|
+:Fill plan details;
+note right
+    - Name: "Premium"
+    - Type: "subscription"
+    - Billing: "monthly"
+end note
+
+:Add USD pricing ($29.99);
+:Add EUR pricing (€26.99);
+:Add GBP pricing (£24.99);
+note right
+    **Multi-Currency Support**
+    Each currency has:
+    - currency code
+    - amount
+    - (optional) provider IDs
+end note
+
+:Select features;
+:Set limits (users: 10, storage: 100GB);
+
+:Click "Create Plan";
+
+|PlanEditorView|
+:Validate form;
+
+if (Form valid?) then (no)
+    |PlanEditorView|
+    :Show validation errors;
+    note right
+        **Client-side Validation**
+        - Name required
+        - At least 1 price
+        - At least 1 feature
+        - Positive amounts
+    end note
+    |Admin|
+    :Fix errors;
+    stop
+else (yes)
+    |usePlanEditor|
+    :savePlan(formData);
+
+    |planManagementStore|
+    :createPlan(data);
+    :Set loading = true;
+
+    |PlanService|
+    :validatePlanData(data);
+    note right
+        **TDD - Validation Tests**
+        ✓ Name not empty
+        ✓ Pricing array not empty
+        ✓ All amounts > 0
+        ✓ Features array not empty
+
+        Tests written BEFORE
+        implementation
+    end note
+
+    if (Valid?) then (yes)
+        |PlanService|
+        :POST /api/v1/admin/plans;
+        :Send CreatePlanData;
+
+        |Backend API|
+        :Validate data;
+        :Create plan record;
+        :Create pricing records;
+        note right
+            **Database Transaction**
+            BEGIN
+              INSERT INTO plans
+              INSERT INTO plan_pricing (USD)
+              INSERT INTO plan_pricing (EUR)
+              INSERT INTO plan_pricing (GBP)
+              INSERT INTO plan_features
+            COMMIT
+        end note
+        :Return created plan;
+
+        |PlanService|
+        :Return TariffPlan;
+
+        |planManagementStore|
+        :Add plan to plans[];
+        :Increment total count;
+        :Set loading = false;
+
+        |usePlanEditor|
+        :Navigate to /admin/plans;
+
+        |PlanListView|
+        :Display updated list;
+        :Show new plan;
+
+        |Admin|
+        :See "Premium" plan;
+        :See all currency prices;
+        note right
+            **Success**
+            Plan created with:
+            - 3 currencies
+            - Selected features
+            - Resource limits
+        end note
+        stop
+
+    else (validation failed)
+        |PlanService|
+        :Throw validation error;
+
+        |planManagementStore|
+        :Set error message;
+        :Set loading = false;
+
+        |PlanEditorView|
+        :Display error toast;
+
+        |Admin|
+        :See error;
+        :Fix and retry;
+        stop
+    endif
+endif
+
+note bottom
+    **SOLID Principles Demonstrated:**
+
+    **SRP - Single Responsibility:**
+    - PlanEditorView: Render form
+    - usePlanEditor: Form logic
+    - planManagementStore: State
+    - PlanService: API calls
+
+    **OCP - Open/Closed:**
+    Plugin can be extended
+    (new features) without
+    modifying core
+
+    **LSP - Liskov Substitution:**
+    IPlanService interface
+    allows different implementations
+
+    **ISP - Interface Segregation:**
+    Specific interfaces per concern
+
+    **DI - Dependency Injection:**
+    Service injected into store
+
+    **Clean Code:**
+    - Clear naming
+    - Small functions (<20 lines)
+    - Immediate feedback
+    - Descriptive errors
+end note
+
+note right of PlanService
+    **TDD Example - createPlan():**
+
+    // RED: Write test first
+    it('should create plan with multi-currency', async () => {
+      const plan = {
+        name: 'Premium',
+        pricing: [
+          { currency: 'USD', amount: 29.99 },
+          { currency: 'EUR', amount: 26.99 }
+        ],
+        features: ['feature_1']
+      }
+      const result = await service.createPlan(plan)
+      expect(result.pricing).toHaveLength(2)
+    })
+
+    // GREEN: Implement to pass
+    async createPlan(data) {
+      this.validatePlanData(data)
+      return await this.apiClient.post('/api/v1/admin/plans', data)
+    }
+
+    // REFACTOR: Improve code quality
+    (add error handling, logging, etc.)
+end note
+
+@enduml

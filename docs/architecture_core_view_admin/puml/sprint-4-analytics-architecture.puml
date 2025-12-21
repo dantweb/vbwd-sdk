@@ -1,0 +1,297 @@
+@startuml sprint-4-analytics-architecture
+!theme plain
+title Sprint 4: Analytics Dashboard - Architecture & Data Flow
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+package "Analytics Dashboard Plugin" {
+
+    package "Views" #E3F2FD {
+        component "AnalyticsOverview" as Overview
+        component "RevenueAnalytics" as Revenue
+        component "SubscriptionAnalytics" as Subscription
+
+        package "Chart Components" {
+            component "MetricCard" as Card
+            component "RevenueChart" as Chart
+            component "ChurnRateChart" as ChurnChart
+            component "DateRangePicker" as DatePicker
+        }
+
+        Overview --> Card
+        Overview --> Chart
+        Overview --> DatePicker
+        Revenue --> Chart
+        Subscription --> ChurnChart
+    }
+
+    package "Composables" #F3E5F5 {
+        component "useAnalyticsDashboard" as DashComp
+        component "useRevenueMetrics" as RevenueComp
+        component "useChartData" as ChartComp
+
+        note right of ChartComp
+            **SRP: Chart Formatting**
+            Responsibilities:
+            - Format time series data
+            - Create chart datasets
+            - Format currency/percentages
+            - Convert API data to Chart.js format
+
+            Pure functions:
+            - formatCurrency(value)
+            - formatPercentage(value)
+            - formatDateLabel(timestamp)
+        end note
+    }
+
+    package "Store" #FFF3E0 {
+        component "analyticsStore" as Store
+
+        note right of Store
+            **State:**
+            - overview: AnalyticsOverview | null
+            - revenueMetrics: RevenueMetrics | null
+            - revenueTimeSeries: RevenueTimeSeries | null
+            - subscriptionMetrics: SubscriptionMetrics | null
+            - loading: boolean
+            - error: string | null
+            - dateRange: { startDate, endDate }
+
+            **Getters (Computed):**
+            - mrrGrowth: Calculate MRR growth %
+            - subscriptionGrowth: Calculate sub growth %
+            - userGrowth: Calculate user growth %
+
+            **DI:**
+            - analyticsService: IAnalyticsService | null
+        end note
+    }
+
+    package "Services" #E8F5E9 {
+        interface "IAnalyticsService" as IService <<interface>>
+        component "AnalyticsService" as Service
+
+        note right of IService
+            **LSP - Interface Contract:**
+            + getOverview(params): Promise<AnalyticsOverview>
+            + getRevenueMetrics(params): Promise<RevenueMetrics>
+            + getRevenueTimeSeries(params): Promise<RevenueTimeSeries>
+            + getSubscriptionMetrics(params): Promise<SubscriptionMetrics>
+            + getUserMetrics(params): Promise<UserMetrics>
+            + getPaymentMetrics(params): Promise<PaymentMetrics>
+            + exportData(params, format): Promise<Blob>
+
+            Any implementation must provide all methods
+        end note
+
+        note bottom of Service
+            **DI Constructor:**
+            constructor(apiClient: IApiClient)
+
+            **Validation:**
+            - validateDateRange(params)
+            - Check date format
+            - Ensure start < end
+            - Limit to 2 years max
+
+            **SRP:**
+            Only handles API communication
+        end note
+
+        IService <|.. Service : implements
+    }
+
+    package "Types" #FFFDE7 {
+        component "Analytics.ts" as Types
+        component "Metrics.ts"
+        component "Chart.ts"
+
+        note right of Types
+            Domain Models:
+            - RevenueMetrics
+            - SubscriptionMetrics
+            - UserMetrics
+            - PaymentMetrics
+            - TimeSeriesData
+            - ChartData/ChartDataset
+
+            Clear separation of:
+            - API types
+            - Chart types
+            - Computed types
+        end note
+    }
+}
+
+package "Core SDK" #E1F5FE {
+    interface "IApiClient" as ApiClient <<interface>>
+}
+
+package "Backend API" #FFEBEE {
+    component "/api/v1/admin/analytics" as API
+
+    package "Analytics Endpoints" {
+        component "/overview" as Overview_EP
+        component "/revenue" as Revenue_EP
+        component "/revenue/time-series" as RevTS_EP
+        component "/subscriptions" as Sub_EP
+        component "/users" as User_EP
+        component "/payments" as Pay_EP
+        component "/export" as Export_EP
+    }
+
+    API --> Overview_EP
+    API --> Revenue_EP
+    API --> RevTS_EP
+    API --> Sub_EP
+    API --> User_EP
+    API --> Pay_EP
+    API --> Export_EP
+}
+
+package "Chart.js Library" #E8EAF6 {
+    component "Chart.js" as ChartJS
+
+    note right of ChartJS
+        Third-party charting library
+        Used via Vue Chart.js wrapper
+
+        Chart types:
+        - Line (revenue trends)
+        - Bar (comparisons)
+        - Doughnut (distribution)
+    end note
+}
+
+' View → Composable
+Overview ..> DashComp : uses
+Revenue ..> RevenueComp : uses
+Chart ..> ChartComp : uses
+
+' Composable → Store
+DashComp ..> Store : uses
+RevenueComp ..> Store : uses
+
+' Composable → Chart.js
+ChartComp ..> ChartJS : formats data for
+
+' Store → Service
+Store --> IService : injected
+Service .up.|> IService
+
+' Service → ApiClient
+Service --> ApiClient : injected
+
+' ApiClient → Backend
+ApiClient --> API : HTTP/HTTPS
+
+' Type usage
+Service ..> Types : uses
+Store ..> Types : uses
+ChartComp ..> Types : uses
+
+note bottom
+    **Data Flow (Example: MRR Chart):**
+
+    1. **User Action**:
+       Admin selects "Last 30 days" → Overview.vue
+
+    2. **Composable**:
+       useAnalyticsDashboard.changeDateRange(start, end)
+
+    3. **Store Action**:
+       store.fetchRevenueTimeSeries({ startDate, endDate })
+
+    4. **Service Call**:
+       analyticsService.getRevenueTimeSeries(params)
+       → Validates date range
+       → Calls apiClient.get('/analytics/revenue/time-series')
+
+    5. **Backend Processing**:
+       - Query subscriptions table
+       - Group by date (daily/weekly/monthly)
+       - Calculate MRR for each period
+       - Return TimeSeriesData[]
+
+    6. **Store Update**:
+       store.revenueTimeSeries = response
+
+    7. **Composable Formatting**:
+       useChartData(timeSeries)
+       → Converts to ChartData format
+       → Formats labels and values
+
+    8. **Chart Rendering**:
+       RevenueChart.vue receives ChartData
+       → Chart.js renders line chart
+end note
+
+note top of Store
+    **Computed Growth Calculation:**
+
+    ```typescript
+    getters: {
+      mrrGrowth: (state): number | null => {
+        if (!state.revenueMetrics?.comparisonPeriod) {
+          return null
+        }
+
+        const current = state.revenueMetrics.mrr
+        const previous = state.revenueMetrics.comparisonPeriod.mrr
+
+        if (previous === 0) return 100
+
+        return ((current - previous) / previous) * 100
+      }
+    }
+    ```
+
+    **Clean Code:**
+    - Descriptive getter name
+    - Null safety
+    - Division by zero check
+    - Clear calculation logic
+end note
+
+note right of Service
+    **Date Range Validation (SRP):**
+
+    ```typescript
+    private validateDateRange(params: DateRangeParams): void {
+      if (!params.startDate || !params.endDate) {
+        throw new Error('Start date and end date are required')
+      }
+
+      const start = new Date(params.startDate)
+      const end = new Date(params.endDate)
+
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        throw new Error('Invalid date format')
+      }
+
+      if (start > end) {
+        throw new Error('Start date must be before end date')
+      }
+
+      // Limit to 2 years
+      const maxDays = 730
+      const daysDiff = Math.ceil(
+        (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+      )
+
+      if (daysDiff > maxDays) {
+        throw new Error('Date range cannot exceed 730 days')
+      }
+    }
+    ```
+
+    **TDD Tests:**
+    ✓ Throws error if dates missing
+    ✓ Throws error if invalid format
+    ✓ Throws error if start > end
+    ✓ Throws error if range > 730 days
+end note
+
+@enduml

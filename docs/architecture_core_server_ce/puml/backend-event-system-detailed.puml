@@ -1,0 +1,611 @@
+@startuml backend-event-system-detailed
+!theme plain
+title Flask Backend - Event-Driven Architecture (Detailed)
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+package "Flask Application" {
+
+    package "HTTP Layer" #E3F2FD {
+        component "Routes" as Routes
+
+        note right of Routes
+            **Route Responsibilities:**
+            - Parse HTTP request
+            - Validate request data
+            - Trigger domain event
+            - Return HTTP response
+
+            **Does NOT:**
+            - Contain business logic
+            - Access database directly
+            - Call external APIs
+
+            ```python
+            @admin_bp.route('/users/<int:user_id>/status', methods=['PUT'])
+            @admin_required
+            def update_user_status(user_id):
+                # 1. Parse request
+                data = request.get_json()
+                status = data.get('status')
+
+                # 2. Validate
+                if not status:
+                    return jsonify({'error': 'Status required'}), 400
+
+                # 3. Trigger event
+                event = UserStatusUpdateRequestedEvent(
+                    user_id=user_id,
+                    status=status,
+                    admin_id=get_current_user_id()
+                )
+                result = event_dispatcher.emit(event)
+
+                # 4. Return response
+                return jsonify(result.to_dict()), 200
+            ```
+
+            **SRP:** Only handles HTTP concerns
+        end note
+    }
+
+    package "Event System" #E8F5E9 {
+        interface "IEventDispatcher" as IDispatcher <<interface>>
+        component "EventDispatcher" as DispatcherImpl
+
+        note right of IDispatcher
+            **Event Dispatcher Interface (LSP):**
+            + emit(event: Event) -> EventResult
+            + register(event_type: str, handler: IEventHandler)
+            + has_handler(event_type: str) -> bool
+
+            **Purpose:**
+            Central event routing and dispatching
+        end note
+
+        note right of DispatcherImpl
+            **Implementation:**
+            ```python
+            class EventDispatcher(IEventDispatcher):
+                def __init__(self):
+                    self._handlers: Dict[str, List[IEventHandler]] = {}
+
+                def emit(self, event: Event) -> EventResult:
+                    handlers = self._handlers.get(event.name, [])
+
+                    if not handlers:
+                        logger.warning(f"No handlers for {event.name}")
+                        return EventResult.no_handler()
+
+                    results = []
+                    for handler in handlers:
+                        try:
+                            result = handler.handle(event)
+                            results.append(result)
+                        except Exception as e:
+                            logger.error(f"Handler error: {e}")
+                            results.append(EventResult.error(str(e)))
+
+                    return EventResult.combine(results)
+
+                def register(self, event_type: str, handler: IEventHandler):
+                    if event_type not in self._handlers:
+                        self._handlers[event_type] = []
+                    self._handlers[event_type].append(handler)
+            ```
+
+            **DI:** Handlers injected via register()
+        end note
+
+        IDispatcher <|.. DispatcherImpl : implements
+    }
+
+    package "Events (Domain Events)" #FFF3E0 {
+        component "Event Base Classes" as EventBase
+
+        note right of EventBase
+            **Event Hierarchy:**
+            ```python
+            @dataclass
+            class Event:
+                name: str
+                timestamp: datetime
+                metadata: Dict[str, Any]
+
+            @dataclass
+            class UserStatusUpdateRequestedEvent(Event):
+                user_id: int
+                status: str
+                admin_id: int
+
+                def __post_init__(self):
+                    self.name = 'user.status.update_requested'
+                    self.timestamp = datetime.utcnow()
+
+            @dataclass
+            class UserStatusUpdatedEvent(Event):
+                user_id: int
+                old_status: str
+                new_status: str
+                admin_id: int
+
+                def __post_init__(self):
+                    self.name = 'user.status.updated'
+            ```
+
+            **Immutable Events:**
+            - dataclass with frozen=True
+            - Clear event naming
+            - Type-safe
+        end note
+    }
+
+    package "Event Handlers" #F3E5F5 {
+        interface "IEventHandler" as IHandler <<interface>>
+        component "UserStatusUpdateHandler" as UserHandler
+        component "SubscriptionCancelHandler" as SubHandler
+        component "PaymentFailedHandler" as PayHandler
+
+        note right of IHandler
+            **Event Handler Interface (LSP):**
+            + handle(event: Event) -> EventResult
+            + can_handle(event: Event) -> bool
+
+            **Single Responsibility:**
+            Each handler processes one event type
+        end note
+
+        note right of UserHandler
+            **Handler Implementation:**
+            ```python
+            class UserStatusUpdateHandler(IEventHandler):
+                def __init__(
+                    self,
+                    user_service: IUserService,
+                    audit_service: IAuditService,
+                    notification_service: INotificationService,
+                    event_dispatcher: IEventDispatcher
+                ):
+                    # DI: All dependencies injected
+                    self._user_service = user_service
+                    self._audit_service = audit_service
+                    self._notification_service = notification_service
+                    self._event_dispatcher = event_dispatcher
+
+                def can_handle(self, event: Event) -> bool:
+                    return event.name == 'user.status.update_requested'
+
+                def handle(self, event: UserStatusUpdateRequestedEvent) -> EventResult:
+                    # 1. Load current state
+                    user = self._user_service.get_by_id(event.user_id)
+                    old_status = user.status
+
+                    # 2. Update status
+                    updated_user = self._user_service.update_status(
+                        event.user_id,
+                        event.status
+                    )
+
+                    # 3. Log action (audit trail)
+                    self._audit_service.log_action(
+                        admin_id=event.admin_id,
+                        action='user_status_update',
+                        resource_type='user',
+                        resource_id=event.user_id,
+                        old_value=old_status,
+                        new_value=event.status
+                    )
+
+                    # 4. Send notification
+                    if event.status == 'suspended':
+                        self._notification_service.notify_user(
+                            user_id=event.user_id,
+                            template='account_suspended'
+                        )
+
+                    # 5. Emit result event
+                    result_event = UserStatusUpdatedEvent(
+                        user_id=event.user_id,
+                        old_status=old_status,
+                        new_status=event.status,
+                        admin_id=event.admin_id
+                    )
+                    self._event_dispatcher.emit(result_event)
+
+                    # 6. Return result
+                    return EventResult.success(updated_user.to_dict())
+            ```
+
+            **SOLID Principles:**
+            - SRP: Only handles user status updates
+            - OCP: Can add new handlers without changes
+            - LSP: Implements IEventHandler
+            - DI: All services injected
+        end note
+
+        IHandler <|.. UserHandler : implements
+        IHandler <|.. SubHandler : implements
+        IHandler <|.. PayHandler : implements
+    }
+
+    package "Services" #C8E6C9 {
+        interface "IUserService" as IUserSvc <<interface>>
+        interface "IAuditService" as IAuditSvc <<interface>>
+        interface "INotificationService" as INotifSvc <<interface>>
+
+        component "UserService" as UserSvcImpl
+        component "AuditService" as AuditSvcImpl
+        component "NotificationService" as NotifSvcImpl
+
+        note right of IUserSvc
+            **Service Interface:**
+            ```python
+            class IUserService(ABC):
+                @abstractmethod
+                def get_by_id(self, user_id: int) -> User:
+                    pass
+
+                @abstractmethod
+                def update_status(
+                    self,
+                    user_id: int,
+                    status: str
+                ) -> User:
+                    pass
+
+                @abstractmethod
+                def create(self, data: CreateUserData) -> User:
+                    pass
+            ```
+
+            **LSP:** Any implementation can be substituted
+        end note
+
+        note right of UserSvcImpl
+            **Service Implementation:**
+            ```python
+            class UserService(IUserService):
+                def __init__(
+                    self,
+                    user_repository: IUserRepository,
+                    user_factory: IUserFactory
+                ):
+                    # DI: Repository and Factory injected
+                    self._repository = user_repository
+                    self._factory = user_factory
+
+                def update_status(self, user_id: int, status: str) -> User:
+                    # 1. Load user
+                    user = self._repository.find_by_id(user_id)
+                    if not user:
+                        raise UserNotFoundException(user_id)
+
+                    # 2. Validate status
+                    if status not in ['active', 'suspended', 'pending']:
+                        raise InvalidStatusException(status)
+
+                    # 3. Update
+                    user.status = status
+                    user.updated_at = datetime.utcnow()
+
+                    # 4. Persist
+                    self._repository.save(user)
+
+                    return user
+            ```
+
+            **SRP:** Only manages user business logic
+            **Does NOT:** Handle HTTP, events, or database directly
+        end note
+
+        IUserSvc <|.. UserSvcImpl : implements
+        IAuditSvc <|.. AuditSvcImpl : implements
+        INotifSvc <|.. NotifSvcImpl : implements
+    }
+
+    package "Factories" #B2DFDB {
+        interface "IUserFactory" as IFactory <<interface>>
+        component "UserFactory" as FactoryImpl
+
+        note right of IFactory
+            **Factory Interface:**
+            ```python
+            class IUserFactory(ABC):
+                @abstractmethod
+                def create_from_registration(
+                    self,
+                    email: str,
+                    password: str
+                ) -> User:
+                    pass
+
+                @abstractmethod
+                def create_from_dict(self, data: dict) -> User:
+                    pass
+            ```
+
+            **Purpose:** Centralize object creation logic
+        end note
+
+        note right of FactoryImpl
+            **Factory Implementation:**
+            ```python
+            class UserFactory(IUserFactory):
+                def __init__(self, password_hasher: IPasswordHasher):
+                    self._password_hasher = password_hasher
+
+                def create_from_registration(
+                    self,
+                    email: str,
+                    password: str
+                ) -> User:
+                    return User(
+                        email=email.lower(),
+                        password_hash=self._password_hasher.hash(password),
+                        status='pending',
+                        email_verified=False,
+                        role='user',
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+            ```
+
+            **SRP:** Only creates User objects
+            **Benefits:**
+            - Centralized creation logic
+            - Consistent defaults
+            - Easy to test
+        end note
+
+        IFactory <|.. FactoryImpl : implements
+    }
+
+    package "Repositories" #DCEDC8 {
+        interface "IUserRepository" as IRepo <<interface>>
+        component "UserRepository" as RepoImpl
+
+        note right of IRepo
+            **Repository Interface:**
+            ```python
+            class IUserRepository(ABC):
+                @abstractmethod
+                def find_by_id(self, user_id: int) -> Optional[User]:
+                    pass
+
+                @abstractmethod
+                def find_by_email(self, email: str) -> Optional[User]:
+                    pass
+
+                @abstractmethod
+                def save(self, user: User) -> User:
+                    pass
+
+                @abstractmethod
+                def delete(self, user_id: int) -> bool:
+                    pass
+            ```
+
+            **Purpose:** Abstract database access
+        end note
+
+        note right of RepoImpl
+            **Repository Implementation:**
+            ```python
+            class UserRepository(IUserRepository):
+                def __init__(self, db: SQLAlchemy):
+                    self._db = db
+
+                def find_by_id(self, user_id: int) -> Optional[User]:
+                    user_model = UserModel.query.get(user_id)
+                    return self._to_domain(user_model) if user_model else None
+
+                def save(self, user: User) -> User:
+                    user_model = self._to_model(user)
+                    self._db.session.add(user_model)
+                    self._db.session.commit()
+                    return self._to_domain(user_model)
+
+                def _to_domain(self, model: UserModel) -> User:
+                    # Convert ORM model to domain entity
+                    return User(**model.to_dict())
+
+                def _to_model(self, user: User) -> UserModel:
+                    # Convert domain entity to ORM model
+                    return UserModel.from_dict(user.to_dict())
+            ```
+
+            **SRP:** Only handles data persistence
+        end note
+
+        IRepo <|.. RepoImpl : implements
+    }
+
+    package "Database" #FFEBEE {
+        component "PostgreSQL" as DB
+    }
+}
+
+' Connections (Dependency Flow)
+Routes --> DispatcherImpl : triggers events
+Routes ..> EventBase : creates
+
+DispatcherImpl --> UserHandler : dispatches to
+DispatcherImpl --> SubHandler : dispatches to
+DispatcherImpl --> PayHandler : dispatches to
+
+UserHandler --> UserSvcImpl : uses
+UserHandler --> AuditSvcImpl : uses
+UserHandler --> NotifSvcImpl : uses
+UserHandler --> DispatcherImpl : emits result events
+
+UserSvcImpl --> RepoImpl : uses
+UserSvcImpl --> FactoryImpl : uses
+
+FactoryImpl ..> IUserSvc : creates Users for
+
+RepoImpl --> DB : queries
+
+note bottom
+    **Complete Flow Example: Update User Status**
+
+    **1. HTTP Request:**
+    PUT /api/v1/admin/users/123/status
+    Body: { "status": "suspended" }
+
+    **2. Route Layer:**
+    - Parse request
+    - Create UserStatusUpdateRequestedEvent
+    - Emit event via dispatcher
+
+    **3. Event Dispatcher:**
+    - Find handlers for 'user.status.update_requested'
+    - Call UserStatusUpdateHandler.handle(event)
+
+    **4. Event Handler:**
+    - Load user via UserService.get_by_id()
+    - Update status via UserService.update_status()
+    - Log action via AuditService.log_action()
+    - Send notification via NotificationService.notify_user()
+    - Emit UserStatusUpdatedEvent
+
+    **5. UserService:**
+    - Load user from UserRepository
+    - Validate status
+    - Update user object
+    - Save via UserRepository
+
+    **6. UserRepository:**
+    - Convert domain User to UserModel (ORM)
+    - Execute SQL UPDATE
+    - Commit transaction
+    - Return updated User
+
+    **7. Response:**
+    - Handler returns EventResult
+    - Route converts to JSON
+    - HTTP 200 with updated user
+end note
+
+note right of DispatcherImpl
+    **Event Registration (Bootstrap):**
+
+    ```python
+    # In app initialization (main.py or __init__.py)
+    def configure_event_handlers(app):
+        dispatcher = EventDispatcher()
+
+        # Instantiate services with DI
+        db = app.extensions['sqlalchemy']
+        user_repo = UserRepository(db)
+        user_factory = UserFactory(PasswordHasher())
+        user_service = UserService(user_repo, user_factory)
+        audit_service = AuditService(db)
+        notification_service = NotificationService(EmailService())
+
+        # Instantiate handlers with DI
+        user_handler = UserStatusUpdateHandler(
+            user_service,
+            audit_service,
+            notification_service,
+            dispatcher
+        )
+
+        # Register handlers
+        dispatcher.register(
+            'user.status.update_requested',
+            user_handler
+        )
+
+        # Make dispatcher available
+        app.event_dispatcher = dispatcher
+
+        return dispatcher
+    ```
+
+    **DI Container:**
+    Consider using dependency-injector library
+    for automatic DI container management
+end note
+
+note top of Routes
+    **Testing Event-Driven Routes:**
+
+    ```python
+    def test_update_user_status_route():
+        # Arrange
+        mock_dispatcher = Mock(spec=IEventDispatcher)
+        mock_dispatcher.emit.return_value = EventResult.success({
+            'id': 123,
+            'status': 'suspended'
+        })
+
+        app.event_dispatcher = mock_dispatcher
+
+        # Act
+        response = client.put(
+            '/api/v1/admin/users/123/status',
+            json={'status': 'suspended'}
+        )
+
+        # Assert
+        assert response.status_code == 200
+        mock_dispatcher.emit.assert_called_once()
+
+        # Verify event
+        event = mock_dispatcher.emit.call_args[0][0]
+        assert event.name == 'user.status.update_requested'
+        assert event.user_id == 123
+        assert event.status == 'suspended'
+    ```
+
+    **TDD Benefits:**
+    - No database needed
+    - Fast tests
+    - Clear behavior verification
+end note
+
+note bottom of UserHandler
+    **Testing Event Handlers:**
+
+    ```python
+    def test_user_status_update_handler():
+        # Arrange
+        mock_user_service = Mock(spec=IUserService)
+        mock_user_service.get_by_id.return_value = User(
+            id=123, status='active'
+        )
+        mock_user_service.update_status.return_value = User(
+            id=123, status='suspended'
+        )
+
+        handler = UserStatusUpdateHandler(
+            mock_user_service,
+            Mock(spec=IAuditService),
+            Mock(spec=INotificationService),
+            Mock(spec=IEventDispatcher)
+        )
+
+        event = UserStatusUpdateRequestedEvent(
+            user_id=123,
+            status='suspended',
+            admin_id=1
+        )
+
+        # Act
+        result = handler.handle(event)
+
+        # Assert
+        assert result.success
+        mock_user_service.update_status.assert_called_with(
+            123, 'suspended'
+        )
+    ```
+
+    **Clean Tests:**
+    - Arrange-Act-Assert pattern
+    - Mocked dependencies
+    - Single concern per test
+end note
+
+@enduml

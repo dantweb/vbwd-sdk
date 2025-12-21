@@ -602,6 +602,998 @@ describe('ValidationService', () => {
 
 ---
 
+## Advanced EventBus Implementation
+
+### 8. EventBus Integration with ApiClient
+
+The ApiClient should emit events for all API operations to enable monitoring, logging, and reactive UI updates.
+
+**File:** `frontend/core/src/api/ApiClient.ts`
+
+```typescript
+import type { IApiClient } from './IApiClient';
+import type { IEventBus } from '../events/IEventBus';
+import type { ApiConfig, ApiResponse } from '../types/api';
+
+/**
+ * API events for request lifecycle
+ */
+export const API_EVENTS = {
+  REQUEST_START: 'api:request:start',
+  REQUEST_SUCCESS: 'api:request:success',
+  REQUEST_ERROR: 'api:request:error',
+  REQUEST_COMPLETE: 'api:request:complete',
+  UNAUTHORIZED: 'api:unauthorized',
+  NETWORK_ERROR: 'api:network:error',
+  TIMEOUT: 'api:timeout'
+} as const;
+
+export interface ApiRequestEvent {
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  data?: any;
+  timestamp: string;
+  requestId: string;
+}
+
+export interface ApiResponseEvent extends ApiRequestEvent {
+  status: number;
+  duration: number;
+  response?: any;
+  error?: string;
+}
+
+export class ApiClient implements IApiClient {
+  private baseURL: string;
+  private headers: Record<string, string>;
+  private readonly eventBus: IEventBus;
+
+  constructor(config: ApiConfig, eventBus: IEventBus) {
+    this.baseURL = config.baseURL;
+    this.headers = config.headers || {};
+    this.eventBus = eventBus;  // DI: EventBus injected
+  }
+
+  async get<T>(url: string): Promise<T> {
+    return this.request<T>('GET', url);
+  }
+
+  async post<T>(url: string, data?: any): Promise<T> {
+    return this.request<T>('POST', url, data);
+  }
+
+  async put<T>(url: string, data?: any): Promise<T> {
+    return this.request<T>('PUT', url, data);
+  }
+
+  async patch<T>(url: string, data?: any): Promise<T> {
+    return this.request<T>('PATCH', url, data);
+  }
+
+  async delete<T>(url: string): Promise<T> {
+    return this.request<T>('DELETE', url);
+  }
+
+  private async request<T>(
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+    url: string,
+    data?: any
+  ): Promise<T> {
+    const requestId = this.generateRequestId();
+    const startTime = Date.now();
+
+    // Emit REQUEST_START event
+    const requestEvent: ApiRequestEvent = {
+      url,
+      method,
+      data,
+      timestamp: new Date().toISOString(),
+      requestId
+    };
+
+    this.eventBus.emit(API_EVENTS.REQUEST_START, requestEvent);
+
+    try {
+      const response = await fetch(`${this.baseURL}${url}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.headers,
+        },
+        body: data ? JSON.stringify(data) : undefined,
+      });
+
+      const duration = Date.now() - startTime;
+
+      // Handle unauthorized
+      if (response.status === 401) {
+        this.eventBus.emit(API_EVENTS.UNAUTHORIZED, {
+          ...requestEvent,
+          status: 401,
+          duration
+        });
+        throw new Error('Unauthorized');
+      }
+
+      // Parse response
+      let responseData: T;
+      const contentType = response.headers.get('content-type');
+
+      if (contentType?.includes('application/json')) {
+        responseData = await response.json();
+      } else {
+        responseData = await response.text() as T;
+      }
+
+      if (!response.ok) {
+        // Emit REQUEST_ERROR event
+        this.eventBus.emit(API_EVENTS.REQUEST_ERROR, {
+          ...requestEvent,
+          status: response.status,
+          duration,
+          error: typeof responseData === 'string' ? responseData : 'Request failed'
+        });
+
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Emit REQUEST_SUCCESS event
+      this.eventBus.emit(API_EVENTS.REQUEST_SUCCESS, {
+        ...requestEvent,
+        status: response.status,
+        duration,
+        response: responseData
+      });
+
+      // Emit REQUEST_COMPLETE event
+      this.eventBus.emit(API_EVENTS.REQUEST_COMPLETE, {
+        ...requestEvent,
+        status: response.status,
+        duration
+      });
+
+      return responseData;
+
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+
+      // Emit appropriate error event
+      if (error.name === 'AbortError' || error.message.includes('timeout')) {
+        this.eventBus.emit(API_EVENTS.TIMEOUT, {
+          ...requestEvent,
+          status: 0,
+          duration,
+          error: error.message
+        });
+      } else if (!navigator.onLine || error.message.includes('Failed to fetch')) {
+        this.eventBus.emit(API_EVENTS.NETWORK_ERROR, {
+          ...requestEvent,
+          status: 0,
+          duration,
+          error: 'Network error'
+        });
+      } else {
+        this.eventBus.emit(API_EVENTS.REQUEST_ERROR, {
+          ...requestEvent,
+          status: 0,
+          duration,
+          error: error.message
+        });
+      }
+
+      // Emit REQUEST_COMPLETE event
+      this.eventBus.emit(API_EVENTS.REQUEST_COMPLETE, {
+        ...requestEvent,
+        status: 0,
+        duration
+      });
+
+      throw error;
+    }
+  }
+
+  setAuthToken(token: string): void {
+    this.headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  clearAuthToken(): void {
+    delete this.headers['Authorization'];
+  }
+
+  private generateRequestId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+}
+```
+
+### 9. Event-Driven Service Patterns
+
+Services should emit domain events for state changes, enabling decoupled communication between components.
+
+**Example: UserService with Events**
+
+**File:** `frontend/user/vue/src/services/UserService.ts`
+
+```typescript
+import type { IApiClient } from '@core/api';
+import type { IEventBus } from '@core/events';
+import type { User, UpdateUserData } from '../types/user';
+
+/**
+ * User domain events
+ */
+export const USER_EVENTS = {
+  PROFILE_UPDATING: 'user:profile:updating',
+  PROFILE_UPDATED: 'user:profile:updated',
+  PROFILE_UPDATE_FAILED: 'user:profile:update:failed',
+  PASSWORD_CHANGING: 'user:password:changing',
+  PASSWORD_CHANGED: 'user:password:changed',
+  AVATAR_UPLOADING: 'user:avatar:uploading',
+  AVATAR_UPLOADED: 'user:avatar:uploaded'
+} as const;
+
+export interface IUserService {
+  updateProfile(userId: number, data: UpdateUserData): Promise<User>;
+  changePassword(userId: number, oldPassword: string, newPassword: string): Promise<void>;
+  uploadAvatar(userId: number, file: File): Promise<string>;
+}
+
+export class UserService implements IUserService {
+  constructor(
+    private readonly apiClient: IApiClient,
+    private readonly eventBus: IEventBus  // DI: EventBus injected
+  ) {}
+
+  async updateProfile(userId: number, data: UpdateUserData): Promise<User> {
+    // Emit event BEFORE API call
+    this.eventBus.emit(USER_EVENTS.PROFILE_UPDATING, {
+      userId,
+      data,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      const user = await this.apiClient.put<User>(
+        `/api/v1/users/${userId}`,
+        data
+      );
+
+      // Emit event AFTER successful update
+      this.eventBus.emit(USER_EVENTS.PROFILE_UPDATED, {
+        userId,
+        user,
+        timestamp: new Date().toISOString()
+      });
+
+      return user;
+
+    } catch (error: any) {
+      // Emit failure event
+      this.eventBus.emit(USER_EVENTS.PROFILE_UPDATE_FAILED, {
+        userId,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+
+      throw error;
+    }
+  }
+
+  async changePassword(
+    userId: number,
+    oldPassword: string,
+    newPassword: string
+  ): Promise<void> {
+    // Emit event BEFORE password change
+    this.eventBus.emit(USER_EVENTS.PASSWORD_CHANGING, {
+      userId,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      await this.apiClient.post(
+        `/api/v1/users/${userId}/change-password`,
+        { oldPassword, newPassword }
+      );
+
+      // Emit event AFTER successful change
+      this.eventBus.emit(USER_EVENTS.PASSWORD_CHANGED, {
+        userId,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  async uploadAvatar(userId: number, file: File): Promise<string> {
+    // Emit event BEFORE upload
+    this.eventBus.emit(USER_EVENTS.AVATAR_UPLOADING, {
+      userId,
+      fileName: file.name,
+      fileSize: file.size,
+      timestamp: new Date().toISOString()
+    });
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    try {
+      const response = await this.apiClient.post<{ avatarUrl: string }>(
+        `/api/v1/users/${userId}/avatar`,
+        formData
+      );
+
+      // Emit event AFTER successful upload
+      this.eventBus.emit(USER_EVENTS.AVATAR_UPLOADED, {
+        userId,
+        avatarUrl: response.avatarUrl,
+        timestamp: new Date().toISOString()
+      });
+
+      return response.avatarUrl;
+
+    } catch (error: any) {
+      throw error;
+    }
+  }
+}
+```
+
+### 10. Plugin Integration Examples
+
+Plugins should listen to events from the Core SDK and other plugins to react to state changes.
+
+**Example: User Plugin Store with Event Listeners**
+
+**File:** `frontend/user/vue/src/stores/userStore.ts`
+
+```typescript
+import { defineStore } from 'pinia';
+import type { IEventBus } from '@core/events';
+import type { User } from '../types/user';
+import { USER_EVENTS } from '../services/UserService';
+import { API_EVENTS } from '@core/api';
+
+interface UserState {
+  currentUser: User | null;
+  loading: boolean;
+  error: string | null;
+  avatarUploadProgress: number;
+  apiRequestsInProgress: number;
+}
+
+export const useUserStore = defineStore('user', {
+  state: (): UserState => ({
+    currentUser: null,
+    loading: false,
+    error: null,
+    avatarUploadProgress: 0,
+    apiRequestsInProgress: 0
+  }),
+
+  actions: {
+    /**
+     * Setup event listeners (called in plugin initialization)
+     */
+    setupEventListeners(eventBus: IEventBus): () => void {
+      const unsubscribers: Array<() => void> = [];
+
+      // Listen to profile updates
+      unsubscribers.push(
+        eventBus.on(USER_EVENTS.PROFILE_UPDATING, () => {
+          this.loading = true;
+          this.error = null;
+        })
+      );
+
+      unsubscribers.push(
+        eventBus.on(USER_EVENTS.PROFILE_UPDATED, (event) => {
+          this.currentUser = event.user;
+          this.loading = false;
+        })
+      );
+
+      unsubscribers.push(
+        eventBus.on(USER_EVENTS.PROFILE_UPDATE_FAILED, (event) => {
+          this.error = event.error;
+          this.loading = false;
+        })
+      );
+
+      // Listen to avatar uploads
+      unsubscribers.push(
+        eventBus.on(USER_EVENTS.AVATAR_UPLOADING, () => {
+          this.avatarUploadProgress = 0;
+        })
+      );
+
+      unsubscribers.push(
+        eventBus.on(USER_EVENTS.AVATAR_UPLOADED, (event) => {
+          if (this.currentUser) {
+            this.currentUser.avatarUrl = event.avatarUrl;
+          }
+          this.avatarUploadProgress = 100;
+        })
+      );
+
+      // Listen to API events for global loading state
+      unsubscribers.push(
+        eventBus.on(API_EVENTS.REQUEST_START, (event) => {
+          if (event.url.includes('/users/')) {
+            this.apiRequestsInProgress++;
+          }
+        })
+      );
+
+      unsubscribers.push(
+        eventBus.on(API_EVENTS.REQUEST_COMPLETE, (event) => {
+          if (event.url.includes('/users/')) {
+            this.apiRequestsInProgress--;
+          }
+        })
+      );
+
+      // Listen to unauthorized events (logout user)
+      unsubscribers.push(
+        eventBus.on(API_EVENTS.UNAUTHORIZED, () => {
+          this.currentUser = null;
+          // Could emit a logout event here
+        })
+      );
+
+      // Return cleanup function
+      return () => {
+        unsubscribers.forEach(unsubscribe => unsubscribe());
+      };
+    }
+  }
+});
+```
+
+**Example: Analytics Plugin Listening to Events**
+
+**File:** `frontend/admin/vue/src/plugins/analytics/stores/analyticsStore.ts`
+
+```typescript
+import { defineStore } from 'pinia';
+import type { IEventBus } from '@core/events';
+import { USER_EVENTS } from '@admin/user-management/services/UserService';
+import { SUBSCRIPTION_EVENTS } from '@admin/subscription-management/services/SubscriptionService';
+import { API_EVENTS } from '@core/api';
+
+interface AnalyticsEvent {
+  type: string;
+  timestamp: string;
+  metadata: Record<string, any>;
+}
+
+interface AnalyticsState {
+  events: AnalyticsEvent[];
+  metrics: {
+    totalApiCalls: number;
+    failedApiCalls: number;
+    averageResponseTime: number;
+    userActionsToday: number;
+    subscriptionChangesToday: number;
+  };
+}
+
+export const useAnalyticsStore = defineStore('analytics', {
+  state: (): AnalyticsState => ({
+    events: [],
+    metrics: {
+      totalApiCalls: 0,
+      failedApiCalls: 0,
+      averageResponseTime: 0,
+      userActionsToday: 0,
+      subscriptionChangesToday: 0
+    }
+  }),
+
+  actions: {
+    setupEventListeners(eventBus: IEventBus): () => void {
+      const unsubscribers: Array<() => void> = [];
+
+      // Track all API requests
+      unsubscribers.push(
+        eventBus.on(API_EVENTS.REQUEST_SUCCESS, (event) => {
+          this.trackEvent('api_request_success', event);
+          this.metrics.totalApiCalls++;
+          this.updateAverageResponseTime(event.duration);
+        })
+      );
+
+      unsubscribers.push(
+        eventBus.on(API_EVENTS.REQUEST_ERROR, (event) => {
+          this.trackEvent('api_request_error', event);
+          this.metrics.failedApiCalls++;
+        })
+      );
+
+      // Track user management events
+      unsubscribers.push(
+        eventBus.on(USER_EVENTS.STATUS_CHANGED, (event) => {
+          this.trackEvent('user_status_changed', event);
+          this.metrics.userActionsToday++;
+        })
+      );
+
+      unsubscribers.push(
+        eventBus.on(USER_EVENTS.SUSPENDED, (event) => {
+          this.trackEvent('user_suspended', event);
+          this.sendAlertToSlack('User suspended', event);
+        })
+      );
+
+      // Track subscription events
+      unsubscribers.push(
+        eventBus.on(SUBSCRIPTION_EVENTS.CANCELLED, (event) => {
+          this.trackEvent('subscription_cancelled', event);
+          this.metrics.subscriptionChangesToday++;
+          this.trackCancellationReason(event.reason);
+        })
+      );
+
+      unsubscribers.push(
+        eventBus.on(SUBSCRIPTION_EVENTS.PAYMENT_FAILED, (event) => {
+          this.trackEvent('payment_failed', event);
+          this.sendAlertToSlack('Payment failed', event);
+        })
+      );
+
+      return () => {
+        unsubscribers.forEach(unsubscribe => unsubscribe());
+      };
+    },
+
+    trackEvent(type: string, metadata: Record<string, any>) {
+      this.events.push({
+        type,
+        timestamp: new Date().toISOString(),
+        metadata
+      });
+
+      // Keep only last 1000 events
+      if (this.events.length > 1000) {
+        this.events.shift();
+      }
+    },
+
+    updateAverageResponseTime(duration: number) {
+      const total = this.metrics.averageResponseTime * (this.metrics.totalApiCalls - 1);
+      this.metrics.averageResponseTime = (total + duration) / this.metrics.totalApiCalls;
+    },
+
+    trackCancellationReason(reason: string) {
+      // Implementation for tracking cancellation reasons
+    },
+
+    sendAlertToSlack(message: string, data: any) {
+      // Implementation for Slack alerts
+    }
+  }
+});
+```
+
+### 11. Advanced Testing Patterns
+
+**Testing Services with EventBus**
+
+**File:** `frontend/user/vue/__tests__/unit/services/UserService.test.ts`
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { UserService, USER_EVENTS } from '../../../src/services/UserService';
+import type { IApiClient } from '@core/api';
+import type { IEventBus } from '@core/events';
+import type { User } from '../../../src/types/user';
+
+describe('UserService', () => {
+  let userService: UserService;
+  let mockApiClient: IApiClient;
+  let mockEventBus: IEventBus;
+
+  beforeEach(() => {
+    // Create mock ApiClient
+    mockApiClient = {
+      get: vi.fn(),
+      post: vi.fn(),
+      put: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
+      setAuthToken: vi.fn(),
+      clearAuthToken: vi.fn()
+    } as IApiClient;
+
+    // Create mock EventBus
+    mockEventBus = {
+      on: vi.fn(() => vi.fn()),
+      once: vi.fn(() => vi.fn()),
+      off: vi.fn(),
+      emit: vi.fn(),
+      emitAsync: vi.fn(),
+      clear: vi.fn(),
+      listenerCount: vi.fn(() => 0)
+    } as IEventBus;
+
+    // Create service with mocked dependencies
+    userService = new UserService(mockApiClient, mockEventBus);
+  });
+
+  describe('updateProfile', () => {
+    it('should emit PROFILE_UPDATING event before API call', async () => {
+      // Arrange
+      const userId = 1;
+      const updateData = { firstName: 'John', lastName: 'Doe' };
+      const updatedUser: User = {
+        id: userId,
+        email: 'john@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        role: 'user',
+        status: 'active'
+      };
+
+      vi.mocked(mockApiClient.put).mockResolvedValue(updatedUser);
+
+      // Act
+      await userService.updateProfile(userId, updateData);
+
+      // Assert
+      expect(mockEventBus.emit).toHaveBeenCalledWith(
+        USER_EVENTS.PROFILE_UPDATING,
+        expect.objectContaining({
+          userId,
+          data: updateData
+        })
+      );
+    });
+
+    it('should emit PROFILE_UPDATED event after successful API call', async () => {
+      // Arrange
+      const userId = 1;
+      const updateData = { firstName: 'John', lastName: 'Doe' };
+      const updatedUser: User = {
+        id: userId,
+        email: 'john@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        role: 'user',
+        status: 'active'
+      };
+
+      vi.mocked(mockApiClient.put).mockResolvedValue(updatedUser);
+
+      // Act
+      await userService.updateProfile(userId, updateData);
+
+      // Assert
+      expect(mockEventBus.emit).toHaveBeenCalledWith(
+        USER_EVENTS.PROFILE_UPDATED,
+        expect.objectContaining({
+          userId,
+          user: updatedUser
+        })
+      );
+    });
+
+    it('should emit PROFILE_UPDATE_FAILED event on API error', async () => {
+      // Arrange
+      const userId = 1;
+      const updateData = { firstName: 'John', lastName: 'Doe' };
+      const error = new Error('Network error');
+
+      vi.mocked(mockApiClient.put).mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(userService.updateProfile(userId, updateData)).rejects.toThrow('Network error');
+
+      expect(mockEventBus.emit).toHaveBeenCalledWith(
+        USER_EVENTS.PROFILE_UPDATE_FAILED,
+        expect.objectContaining({
+          userId,
+          error: 'Network error'
+        })
+      );
+    });
+
+    it('should emit events in correct order', async () => {
+      // Arrange
+      const userId = 1;
+      const updateData = { firstName: 'John', lastName: 'Doe' };
+      const updatedUser: User = {
+        id: userId,
+        email: 'john@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        role: 'user',
+        status: 'active'
+      };
+
+      vi.mocked(mockApiClient.put).mockResolvedValue(updatedUser);
+
+      // Act
+      await userService.updateProfile(userId, updateData);
+
+      // Assert
+      const emitCalls = vi.mocked(mockEventBus.emit).mock.calls;
+      expect(emitCalls[0][0]).toBe(USER_EVENTS.PROFILE_UPDATING);
+      expect(emitCalls[1][0]).toBe(USER_EVENTS.PROFILE_UPDATED);
+    });
+  });
+
+  describe('changePassword', () => {
+    it('should emit PASSWORD_CHANGING event before API call', async () => {
+      // Arrange
+      const userId = 1;
+      const oldPassword = 'OldPassword123';
+      const newPassword = 'NewPassword123';
+
+      vi.mocked(mockApiClient.post).mockResolvedValue({});
+
+      // Act
+      await userService.changePassword(userId, oldPassword, newPassword);
+
+      // Assert
+      expect(mockEventBus.emit).toHaveBeenCalledWith(
+        USER_EVENTS.PASSWORD_CHANGING,
+        expect.objectContaining({
+          userId
+        })
+      );
+    });
+
+    it('should emit PASSWORD_CHANGED event after successful change', async () => {
+      // Arrange
+      const userId = 1;
+      const oldPassword = 'OldPassword123';
+      const newPassword = 'NewPassword123';
+
+      vi.mocked(mockApiClient.post).mockResolvedValue({});
+
+      // Act
+      await userService.changePassword(userId, oldPassword, newPassword);
+
+      // Assert
+      expect(mockEventBus.emit).toHaveBeenCalledWith(
+        USER_EVENTS.PASSWORD_CHANGED,
+        expect.objectContaining({
+          userId
+        })
+      );
+    });
+  });
+});
+```
+
+**Testing Event Listeners in Stores**
+
+**File:** `frontend/user/vue/__tests__/unit/stores/userStore.test.ts`
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { setActivePinia, createPinia } from 'pinia';
+import { useUserStore } from '../../../src/stores/userStore';
+import type { IEventBus } from '@core/events';
+import { USER_EVENTS } from '../../../src/services/UserService';
+import { API_EVENTS } from '@core/api';
+
+describe('userStore', () => {
+  let mockEventBus: IEventBus;
+  let eventHandlers: Map<string, Function>;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    eventHandlers = new Map();
+
+    // Create mock EventBus that captures event handlers
+    mockEventBus = {
+      on: vi.fn((event: string, handler: Function) => {
+        eventHandlers.set(event, handler);
+        return vi.fn(); // Return unsubscribe function
+      }),
+      once: vi.fn(() => vi.fn()),
+      off: vi.fn(),
+      emit: vi.fn(),
+      emitAsync: vi.fn(),
+      clear: vi.fn(),
+      listenerCount: vi.fn(() => 0)
+    } as any;
+  });
+
+  it('should update loading state on PROFILE_UPDATING event', () => {
+    // Arrange
+    const store = useUserStore();
+    store.setupEventListeners(mockEventBus);
+
+    // Act
+    const handler = eventHandlers.get(USER_EVENTS.PROFILE_UPDATING);
+    handler?.();
+
+    // Assert
+    expect(store.loading).toBe(true);
+    expect(store.error).toBe(null);
+  });
+
+  it('should update currentUser on PROFILE_UPDATED event', () => {
+    // Arrange
+    const store = useUserStore();
+    store.setupEventListeners(mockEventBus);
+
+    const updatedUser = {
+      id: 1,
+      email: 'john@example.com',
+      firstName: 'John',
+      lastName: 'Doe',
+      role: 'user',
+      status: 'active'
+    };
+
+    // Act
+    const handler = eventHandlers.get(USER_EVENTS.PROFILE_UPDATED);
+    handler?.({ user: updatedUser });
+
+    // Assert
+    expect(store.currentUser).toEqual(updatedUser);
+    expect(store.loading).toBe(false);
+  });
+
+  it('should update error state on PROFILE_UPDATE_FAILED event', () => {
+    // Arrange
+    const store = useUserStore();
+    store.setupEventListeners(mockEventBus);
+
+    const errorMessage = 'Failed to update profile';
+
+    // Act
+    const handler = eventHandlers.get(USER_EVENTS.PROFILE_UPDATE_FAILED);
+    handler?.({ error: errorMessage });
+
+    // Assert
+    expect(store.error).toBe(errorMessage);
+    expect(store.loading).toBe(false);
+  });
+
+  it('should track API requests in progress', () => {
+    // Arrange
+    const store = useUserStore();
+    store.setupEventListeners(mockEventBus);
+
+    // Act - Start request
+    const startHandler = eventHandlers.get(API_EVENTS.REQUEST_START);
+    startHandler?.({ url: '/api/v1/users/1' });
+
+    // Assert
+    expect(store.apiRequestsInProgress).toBe(1);
+
+    // Act - Complete request
+    const completeHandler = eventHandlers.get(API_EVENTS.REQUEST_COMPLETE);
+    completeHandler?.({ url: '/api/v1/users/1' });
+
+    // Assert
+    expect(store.apiRequestsInProgress).toBe(0);
+  });
+
+  it('should clear currentUser on UNAUTHORIZED event', () => {
+    // Arrange
+    const store = useUserStore();
+    store.currentUser = {
+      id: 1,
+      email: 'john@example.com',
+      firstName: 'John',
+      lastName: 'Doe',
+      role: 'user',
+      status: 'active'
+    };
+    store.setupEventListeners(mockEventBus);
+
+    // Act
+    const handler = eventHandlers.get(API_EVENTS.UNAUTHORIZED);
+    handler?.();
+
+    // Assert
+    expect(store.currentUser).toBe(null);
+  });
+
+  it('should cleanup event listeners on unsubscribe', () => {
+    // Arrange
+    const store = useUserStore();
+    const unsubscribe = store.setupEventListeners(mockEventBus);
+
+    // Act
+    unsubscribe();
+
+    // Assert
+    // Each event listener registration returns an unsubscribe function
+    // We should have called on() for each event we listen to
+    expect(mockEventBus.on).toHaveBeenCalled();
+  });
+});
+```
+
+### 12. Benefits of Event-Driven Architecture
+
+**Decoupling**
+- Components don't need direct references to each other
+- Services emit events without knowing who listens
+- Easy to add new listeners without modifying existing code
+
+**Testability**
+- Mock EventBus in tests to verify event emission
+- Test event handlers independently
+- No need for complex integration tests
+
+**Auditability**
+- All state changes emit events with timestamps
+- Easy to implement audit logs
+- Track user actions across the application
+
+**Real-time Updates**
+- Multiple components react to same event
+- UI updates automatically when state changes
+- WebSocket events can be integrated into the same system
+
+**Maintainability**
+- Clear separation of concerns (SRP)
+- Easy to add new features by listening to existing events
+- Follows Open/Closed Principle (OCP)
+
+**Example Benefits in Action:**
+
+```typescript
+// ❌ BAD: Tight coupling
+class UserService {
+  constructor(
+    private api: IApiClient,
+    private userStore: UserStore,           // Tight coupling!
+    private analyticsStore: AnalyticsStore, // Tight coupling!
+    private toastService: ToastService      // Tight coupling!
+  ) {}
+
+  async updateProfile(userId: number, data: any) {
+    const user = await this.api.put(`/users/${userId}`, data);
+    this.userStore.setCurrentUser(user);          // Direct call
+    this.analyticsStore.trackProfileUpdate(user); // Direct call
+    this.toastService.success('Profile updated'); // Direct call
+    return user;
+  }
+}
+
+// ✅ GOOD: Event-driven, decoupled
+class UserService {
+  constructor(
+    private api: IApiClient,
+    private eventBus: IEventBus  // Only EventBus dependency!
+  ) {}
+
+  async updateProfile(userId: number, data: any) {
+    this.eventBus.emit(USER_EVENTS.PROFILE_UPDATING, { userId, data });
+
+    const user = await this.api.put(`/users/${userId}`, data);
+
+    this.eventBus.emit(USER_EVENTS.PROFILE_UPDATED, { userId, user });
+
+    return user;
+  }
+}
+
+// Other components listen independently
+userStore.setupEventListeners(eventBus);      // Updates UI
+analyticsStore.setupEventListeners(eventBus); // Tracks metrics
+toastPlugin.setupEventListeners(eventBus);    // Shows notifications
+```
+
+**SOLID Principles:**
+- **SRP:** Services only handle business logic, emit events
+- **OCP:** Add new listeners without modifying services
+- **LSP:** IEventBus interface allows substitution (mock for testing)
+- **ISP:** Focused event interfaces (USER_EVENTS, API_EVENTS)
+- **DI:** EventBus injected via constructor
+
+---
+
 ## Definition of Done
 
 - [x] IEventBus interface with type-safe events
