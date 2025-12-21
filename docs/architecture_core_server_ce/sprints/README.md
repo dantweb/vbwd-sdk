@@ -266,7 +266,7 @@ python/api/
 **Business Logic:**
 - [Sprint 2: Auth & Users](./sprint-2-auth-users.md) - Registration, login, JWT
 - [Sprint 3: Subscriptions](./sprint-3-subscriptions.md) - Tariff plans, subscription lifecycle
-- [Sprint 4: Payments](./sprint-4-payments.md) - Invoice, PayPal/Stripe integration
+- [Sprint 4: Payments](wrong_sprint-XX-payments.md) - Invoice, PayPal/Stripe integration
 - [Sprint 5: Admin & Webhooks](./sprint-5-admin-webhooks.md) - Admin API, webhook handlers
 
 **Event-Driven Architecture:**

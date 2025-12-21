@@ -1049,4 +1049,4 @@ curl http://localhost:5000/api/v1/user/subscriptions \
 
 ## Next Sprint
 
-[Sprint 4: Payments](./sprint-4-payments.md) - Invoice and payment integration.
+[Sprint 4: Payments](wrong_sprint-XX-payments.md) - Invoice and payment integration.
