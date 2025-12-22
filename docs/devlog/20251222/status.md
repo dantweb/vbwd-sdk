@@ -1,8 +1,8 @@
 # Development Status - December 22, 2025
 
 **Session Start:** 2025-12-22
-**Current Phase:** Payment System Implementation
-**Status:** SESSION COMPLETE - SPRINTS 13-15, 18 DONE
+**Current Phase:** Payment System Implementation + Project Split
+**Status:** SESSION COMPLETE - SPRINTS 13-15, 18 DONE + REPO SPLIT
 
 ---
 
@@ -278,11 +278,39 @@ handler: IWebhookHandler = StripeWebhookHandler()  # Future plugin
 
 ---
 
+## Project Split - COMPLETE
+
+**Report:** [done/project-split-report.md](done/project-split-report.md)
+
+Split the monolithic repository into three separate repositories:
+
+| Repository | Description | CI | Link |
+|------------|-------------|-----|------|
+| **vbwd-sdk** | Documentation & Architecture | - | [github.com/dantweb/vbwd-sdk](https://github.com/dantweb/vbwd-sdk) |
+| **vbwd-backend** | Python/Flask API (292 tests) | GitHub Actions | [github.com/dantweb/vbwd-backend](https://github.com/dantweb/vbwd-backend) |
+| **vbwd-frontend** | Vue.js Applications | GitHub Actions | [github.com/dantweb/vbwd-frontend](https://github.com/dantweb/vbwd-frontend) |
+
+### Benefits
+- Independent CI/CD pipelines
+- Faster builds (only affected code triggers)
+- Clear separation of concerns
+- Independent versioning and releases
+
+### New Test Commands (vbwd-backend)
+```bash
+cd /home/dtkachev/dantweb/vbwd-backend
+make test          # Run all tests
+make test-unit     # Run unit tests only
+make test-coverage # Run with coverage
+```
+
+---
+
 ## Next Steps
 
-1. **Future Session**: Implement Stripe plugin
-2. **Future Session**: Implement PayPal plugin
-3. **Sprint 18**: Payment routes and application wiring
+1. **Future Session**: Implement Stripe plugin (in vbwd-backend)
+2. **Future Session**: Implement PayPal plugin (in vbwd-backend)
+3. **Future Session**: Payment routes and application wiring
 
 ---
 
@@ -290,3 +318,4 @@ handler: IWebhookHandler = StripeWebhookHandler()  # Future plugin
 **Session Status:** COMPLETE
 **Tests Added This Session:** 148
 **Total Tests:** 292
+**Repos Created:** 2 (vbwd-backend, vbwd-frontend)
