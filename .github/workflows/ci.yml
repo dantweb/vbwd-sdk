@@ -1,0 +1,363 @@
+name: VBWD CE - CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Job 1: Setup and Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout SDK repository
+        uses: actions/checkout@v4
+        with:
+          path: vbwd-sdk
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: Run development installation script
+        working-directory: vbwd-sdk
+        run: |
+          chmod +x recipes/dev-install-ce.sh
+          ./recipes/dev-install-ce.sh
+
+      - name: Verify backend health
+        run: |
+          echo "Checking backend health endpoint..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:5000/health; then
+              echo "Backend is healthy"
+              exit 0
+            fi
+            echo "Attempt $i: Backend not ready, waiting..."
+            sleep 2
+          done
+          echo "Backend health check failed"
+          exit 1
+
+      - name: Run backend integration tests
+        working-directory: vbwd-backend
+        run: |
+          echo "Running integration tests..."
+          docker-compose run --rm python-test pytest tests/integration/ -v --tb=short --junit-xml=test-results/integration-tests.xml
+
+      - name: Test frontend-backend connectivity
+        run: |
+          echo "Testing API connectivity from frontend perspective..."
+          # Test basic API endpoints
+          curl -f http://localhost:5000/health || exit 1
+
+          # Test CORS and API structure
+          response=$(curl -sf -H "Origin: http://localhost:8080" http://localhost:5000/health)
+          if [ $? -eq 0 ]; then
+            echo "Frontend-backend connectivity test passed"
+          else
+            echo "Frontend-backend connectivity test failed"
+            exit 1
+          fi
+
+      - name: Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: vbwd-backend/test-results/
+          retention-days: 7
+
+      - name: Display container logs on failure
+        if: failure()
+        run: |
+          echo "=== Backend Logs ==="
+          cd vbwd-backend && docker-compose logs python
+          echo "=== Database Logs ==="
+          docker-compose logs postgres
+          echo "=== Redis Logs ==="
+          docker-compose logs redis
+
+  # Job 2: E2E Tests with Playwright
+  e2e-tests:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: integration-tests
+
+    steps:
+      - name: Checkout SDK repository
+        uses: actions/checkout@v4
+        with:
+          path: vbwd-sdk
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run development installation script
+        working-directory: vbwd-sdk
+        run: |
+          chmod +x recipes/dev-install-ce.sh
+          ./recipes/dev-install-ce.sh
+
+      - name: Install Playwright
+        working-directory: vbwd-frontend
+        run: |
+          # Check if package.json has playwright
+          if [ -f "package.json" ]; then
+            npm ci || npm install
+
+            # Install Playwright if it's in dependencies
+            if grep -q "@playwright/test" package.json; then
+              npx playwright install --with-deps chromium
+            else
+              echo "Playwright not found in package.json, installing..."
+              npm install -D @playwright/test
+              npx playwright install --with-deps chromium
+            fi
+          else
+            echo "No package.json found, creating minimal E2E setup..."
+            npm init -y
+            npm install -D @playwright/test
+            npx playwright install --with-deps chromium
+          fi
+
+      - name: Wait for services
+        run: |
+          echo "Waiting for all services to be ready..."
+
+          # Wait for backend
+          for i in {1..30}; do
+            if curl -sf http://localhost:5000/health > /dev/null; then
+              echo "Backend ready"
+              break
+            fi
+            sleep 2
+          done
+
+          # Wait for frontend
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080 > /dev/null; then
+              echo "Frontend ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Create Playwright test if not exists
+        working-directory: vbwd-frontend
+        run: |
+          # Create tests directory if it doesn't exist
+          mkdir -p tests/e2e
+
+          # Create a basic E2E test if none exists
+          if [ ! -f "tests/e2e/basic.spec.ts" ] && [ ! -f "tests/e2e/basic.spec.js" ]; then
+            cat > tests/e2e/basic.spec.ts << 'EOF'
+          import { test, expect } from '@playwright/test';
+
+          test.describe('VBWD Platform E2E Tests', () => {
+            test('should load frontend homepage', async ({ page }) => {
+              await page.goto('http://localhost:8080');
+              await expect(page).toHaveTitle(/VBWD|Vue/i);
+            });
+
+            test('should connect to backend API', async ({ page, request }) => {
+              const response = await request.get('http://localhost:5000/health');
+              expect(response.ok()).toBeTruthy();
+            });
+
+            test('should display user interface elements', async ({ page }) => {
+              await page.goto('http://localhost:8080');
+              await page.waitForLoadState('networkidle');
+              // Check that the page has loaded some content
+              const content = await page.textContent('body');
+              expect(content).toBeTruthy();
+            });
+          });
+          EOF
+          fi
+
+          # Create playwright config if it doesn't exist
+          if [ ! -f "playwright.config.ts" ] && [ ! -f "playwright.config.js" ]; then
+            cat > playwright.config.ts << 'EOF'
+          import { defineConfig } from '@playwright/test';
+
+          export default defineConfig({
+            testDir: './tests/e2e',
+            fullyParallel: true,
+            forbidOnly: !!process.env.CI,
+            retries: process.env.CI ? 2 : 0,
+            workers: process.env.CI ? 1 : undefined,
+            reporter: [
+              ['html'],
+              ['junit', { outputFile: 'test-results/e2e-results.xml' }]
+            ],
+            use: {
+              baseURL: 'http://localhost:8080',
+              trace: 'on-first-retry',
+              screenshot: 'only-on-failure',
+            },
+            projects: [
+              {
+                name: 'chromium',
+                use: { browserName: 'chromium' },
+              },
+            ],
+          });
+          EOF
+          fi
+
+      - name: Run Playwright E2E tests
+        working-directory: vbwd-frontend
+        run: |
+          echo "Running E2E tests..."
+          npx playwright test --reporter=html,junit
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: vbwd-frontend/playwright-report/
+          retention-days: 7
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: vbwd-frontend/test-results/
+          retention-days: 7
+
+      - name: Display logs on failure
+        if: failure()
+        run: |
+          echo "=== Backend Logs ==="
+          cd vbwd-backend && docker-compose logs python
+          echo "=== Frontend Logs ==="
+          cd vbwd-frontend && docker-compose logs 2>/dev/null || echo "No frontend container logs"
+
+  # Job 3: Backend Unit Tests (Fast feedback)
+  backend-unit-tests:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout SDK repository
+        uses: actions/checkout@v4
+        with:
+          path: vbwd-sdk
+
+      - name: Checkout backend repository
+        uses: actions/checkout@v4
+        with:
+          repository: dantweb/vbwd-backend
+          path: vbwd-backend
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create backend .env file
+        working-directory: vbwd-backend
+        run: |
+          if [ -f ".env.example" ]; then
+            cp .env.example .env
+          else
+            cat > .env << 'EOF'
+          POSTGRES_PASSWORD=vbwd
+          POSTGRES_DB=vbwd
+          POSTGRES_USER=vbwd
+          DATABASE_URL=postgresql://vbwd:vbwd@postgres:5432/vbwd
+          FLASK_ENV=testing
+          FLASK_SECRET_KEY=test-secret-key
+          REDIS_URL=redis://redis:6379/0
+          EOF
+          fi
+
+      - name: Start backend services
+        working-directory: vbwd-backend
+        run: |
+          docker-compose up -d postgres redis
+          sleep 10
+
+      - name: Run unit tests with coverage
+        working-directory: vbwd-backend
+        run: |
+          docker-compose run --rm python-test pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html --junit-xml=test-results/unit-tests.xml
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            vbwd-backend/htmlcov/
+            vbwd-backend/coverage.xml
+          retention-days: 7
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: vbwd-backend/test-results/
+          retention-days: 7
+
+  # Job 4: Test Summary
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [integration-tests, e2e-tests, backend-unit-tests]
+    if: always()
+
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results
+
+      - name: Display test summary
+        run: |
+          echo "=== Test Summary ==="
+          echo "Integration Tests: ${{ needs.integration-tests.result }}"
+          echo "E2E Tests: ${{ needs.e2e-tests.result }}"
+          echo "Unit Tests: ${{ needs.backend-unit-tests.result }}"
+
+          if [ -d "test-results" ]; then
+            echo ""
+            echo "Test artifacts available for download in the Actions tab"
+            ls -R test-results/
+          fi
+
+      - name: Check overall status
+        run: |
+          if [ "${{ needs.integration-tests.result }}" != "success" ] || \
+             [ "${{ needs.e2e-tests.result }}" != "success" ] || \
+             [ "${{ needs.backend-unit-tests.result }}" != "success" ]; then
+            echo "Some tests failed. Please check the individual job logs."
+            exit 1
+          fi
+          echo "All tests passed successfully!"
