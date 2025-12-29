@@ -1,0 +1,125 @@
+@startuml user-pages-layout
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+
+title User Cabinet - Page Layouts with Demo Content
+
+rectangle "Profile Page" as profile #E3F2FD {
+  rectangle "Header" as ph #BBDEFB {
+    label "  VBWD Platform  |  Dashboard  |  Settings  |  [John Doe ▼]  " as phl
+  }
+
+  rectangle "Sidebar" as ps #E8EAF6 {
+    label "**My Account**\n────────────\n→ Profile\n  Subscription\n  Invoices\n  Plans\n────────────\n  Logout" as psl
+  }
+
+  rectangle "Content" as pc #FFFFFF {
+    rectangle "Profile Settings" as pcs #F5F5F5 {
+      label "**Profile Information**\n\n┌─────────────────────────────────────────┐\n│  [Avatar]   First Name: John            │\n│   J.D.      Last Name:  Doe             │\n│             Email:      john@acme.com   │\n│             Phone:      +1 555 123 4567 │\n│             Company:    Acme Corp       │\n└─────────────────────────────────────────┘\n              [ Save Changes ]" as pcsl
+    }
+
+    rectangle "Security" as pcsec #F5F5F5 {
+      label "**Change Password**\n\n Current Password:  ••••••••\n New Password:      ________\n Confirm Password:  ________\n\n        [ Update Password ]" as pcsecl
+    }
+
+    rectangle "Danger Zone" as pcdz #FFEBEE {
+      label "**Delete Account**\nPermanently delete your account and all data.\n[ Delete My Account ]" as pcdzl
+    }
+  }
+}
+
+newpage
+
+rectangle "Subscription Page" as subscription #E3F2FD {
+  rectangle "Header" as sh #BBDEFB {
+    label "  VBWD Platform  |  Dashboard  |  Settings  |  [John Doe ▼]  " as shl
+  }
+
+  rectangle "Sidebar" as ss #E8EAF6 {
+    label "**My Account**\n────────────\n  Profile\n→ Subscription\n  Invoices\n  Plans\n────────────\n  Logout" as ssl
+  }
+
+  rectangle "Content" as sc #FFFFFF {
+    rectangle "Current Plan" as scp #E8F5E9 {
+      label "**PRO PLAN**                              Status: ACTIVE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n$29.00/month  •  Billing cycle: Monthly\nNext billing date: January 15, 2025\nPayment method: Visa •••• 4242\n\n[ Change Plan ]  [ Cancel Subscription ]" as scpl
+    }
+
+    rectangle "Features Included" as scf #F5F5F5 {
+      label "**Your Features**\n\n ✓ Unlimited projects       ✓ Priority support\n ✓ API access (10k/mo)      ✓ Custom integrations\n ✓ 10 GB storage            ✓ Team collaboration\n ✗ White-label (Enterprise) ✗ Dedicated support" as scfl
+    }
+
+    rectangle "Usage This Month" as scu #F5F5F5 {
+      label "**Usage Statistics** (December 2024)\n\n API Calls     ████████░░░░░░░░  4,231 / 10,000  (42%)\n Storage       ██████████████░░  7.2 GB / 10 GB  (72%)\n Team Members  ████░░░░░░░░░░░░  2 / 10          (20%)\n Projects      ████████████████  12 / Unlimited" as scul
+    }
+  }
+}
+
+newpage
+
+rectangle "Invoices Page" as invoices #E3F2FD {
+  rectangle "Header" as ih #BBDEFB {
+    label "  VBWD Platform  |  Dashboard  |  Settings  |  [John Doe ▼]  " as ihl
+  }
+
+  rectangle "Sidebar" as is #E8EAF6 {
+    label "**My Account**\n────────────\n  Profile\n  Subscription\n→ Invoices\n  Plans\n────────────\n  Logout" as isl
+  }
+
+  rectangle "Content" as ic #FFFFFF {
+    rectangle "Invoice History" as ich #F5F5F5 {
+      label "**Invoice History**\n\n┌────────────┬────────────┬──────────┬─────────┬─────────┐\n│ Invoice #  │ Date       │ Amount   │ Status  │ Action  │\n├────────────┼────────────┼──────────┼─────────┼─────────┤\n│ INV-2024-012 │ Dec 15, 2024 │ $29.00 │ ● Paid  │ [PDF]   │\n│ INV-2024-011 │ Nov 15, 2024 │ $29.00 │ ● Paid  │ [PDF]   │\n│ INV-2024-010 │ Oct 15, 2024 │ $29.00 │ ● Paid  │ [PDF]   │\n│ INV-2024-009 │ Sep 15, 2024 │ $29.00 │ ● Paid  │ [PDF]   │\n│ INV-2024-008 │ Aug 15, 2024 │ $29.00 │ ● Paid  │ [PDF]   │\n│ INV-2024-007 │ Jul 15, 2024 │ $29.00 │ ● Paid  │ [PDF]   │\n└────────────┴────────────┴──────────┴─────────┴─────────┘\n\n                    [ ← Prev ]  Page 1 of 2  [ Next → ]" as ichl
+    }
+
+    rectangle "Summary" as ics #E8F5E9 {
+      label "**Billing Summary**\nTotal paid (2024): $348.00  •  12 invoices  •  All payments on time" as icsl
+    }
+  }
+}
+
+newpage
+
+rectangle "Plans Page" as plans #E3F2FD {
+  rectangle "Header" as plh #BBDEFB {
+    label "  VBWD Platform  |  Dashboard  |  Settings  |  [John Doe ▼]  " as plhl
+  }
+
+  rectangle "Sidebar" as pls #E8EAF6 {
+    label "**My Account**\n────────────\n  Profile\n  Subscription\n  Invoices\n→ Plans\n────────────\n  Logout" as plsl
+  }
+
+  rectangle "Content" as plc #FFFFFF {
+    rectangle "Plan Selection" as plcs #F5F5F5 {
+      label "**Choose Your Plan**\nSelect the plan that best fits your needs. Upgrade or downgrade anytime." as plcsl
+    }
+
+    rectangle "Free Plan" as plf #FAFAFA {
+      label "**FREE**\n━━━━━━━━━━━━━\n$0/month\n\n• 3 projects\n• 1 GB storage\n• 1,000 API calls\n• Community support\n• Basic analytics\n\n[ Downgrade ]" as plfl
+    }
+
+    rectangle "Pro Plan" as plp #E3F2FD {
+      label "**PRO** ★ Current\n━━━━━━━━━━━━━\n$29/month\n\n• Unlimited projects\n• 10 GB storage\n• 10,000 API calls\n• Priority support\n• Advanced analytics\n• API access\n\n[ Current Plan ]" as plpl
+    }
+
+    rectangle "Enterprise Plan" as ple #FFF3E0 {
+      label "**ENTERPRISE**\n━━━━━━━━━━━━━\nCustom pricing\n\n• Everything in Pro\n• Unlimited storage\n• Unlimited API calls\n• Dedicated support\n• White-label\n• SLA guarantee\n• SSO/SAML\n\n[ Contact Sales ]" as plel
+    }
+  }
+}
+
+newpage
+
+rectangle "Upgrade Confirmation" as upgrade #E3F2FD {
+  rectangle "Header" as uh #BBDEFB {
+    label "  VBWD Platform  |  Dashboard  |  Settings  |  [John Doe ▼]  " as uhl
+  }
+
+  rectangle "Modal Overlay" as umo #90909080 {
+    rectangle "Upgrade Dialog" as ud #FFFFFF {
+      label "**Upgrade to Enterprise**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**Plan Changes:**\nFrom: Pro ($29/month)\nTo:   Enterprise (Custom)\n\n**What you'll get:**\n ✓ Unlimited storage (was 10 GB)\n ✓ Unlimited API calls (was 10,000)\n ✓ Dedicated account manager\n ✓ 99.9% SLA guarantee\n ✓ SSO/SAML integration\n ✓ White-label options\n\n**Proration:**\nDays remaining in cycle: 15\nCredit from Pro plan: -$14.50\nEnterprise (prorated): Contact for quote\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n[ Cancel ]                    [ Contact Sales ]" as udl
+    }
+  }
+}
+
+@enduml

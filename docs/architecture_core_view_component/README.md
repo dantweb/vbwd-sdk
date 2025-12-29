@@ -1,4 +1,4 @@
-# VBWD Core SDK
+# VBWD Core View Compoentent Architecture
 
 **Project:** VBWD-SDK - Shared Core Module for User & Admin Applications
 **Status:** Initial Development
@@ -8,13 +8,13 @@
 
 ## 1. Overview
 
-The **VBWD Core SDK** (`vbwd-core-sdk`) is a shared TypeScript module that provides common functionality for both the user-facing application and the admin application. This ensures consistency, reduces code duplication, and maintains a single source of truth for core features.
+The **VBWD Core View Compoentent** (`vbwd-component`) is a shared TypeScript module that provides common functionality for both the user-facing application and the admin application. This ensures consistency, reduces code duplication, and maintains a single source of truth for core features.
 
 ### Key Principle: DRY (Don't Repeat Yourself)
 
 Both apps share the same:
 - Plugin system architecture
-- API client and authentication
+- API client and authenticationf
 - Type definitions
 - Validation schemas
 - Event bus
@@ -26,8 +26,8 @@ Both apps share the same:
 
 ```
 frontend/
-├── core/                          # vbwd-core-sdk (shared module)
-│   ├── package.json               # Core SDK package definition
+├── core/                          # Core View Compoentent (shared module)
+│   ├── package.json               # Core View Compoententpackage definition
 │   ├── tsconfig.json              # TypeScript config
 │   ├── src/
 │   │   ├── index.ts               # Main exports
@@ -88,7 +88,7 @@ frontend/
 │   │       ├── date.ts
 │   │       └── storage.ts
 │   │
-│   └── __tests__/                 # Core SDK tests
+│   └── __tests__/                 # Core View Compoentent tests
 │       ├── unit/
 │       └── integration/
 │
@@ -119,7 +119,7 @@ frontend/
 
 ---
 
-## 3. Core SDK Modules
+## 3. Core View Compoentent Modules
 
 ### 3.1 Plugin System
 
@@ -273,7 +273,7 @@ npm link ../../core
 
 ### 4.2 Future: Separate NPM Package
 
-Later, publish as `@vbwd/core-sdk`:
+Later, publish as `@vbwd/view-component`:
 
 ```bash
 cd frontend/core
@@ -284,7 +284,7 @@ Then in user and admin apps:
 ```json
 {
   "dependencies": {
-    "@vbwd/core-sdk": "^1.0.0"
+    "@vbwd/view-component": "^1.0.0"
   }
 }
 ```

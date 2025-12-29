@@ -49,6 +49,33 @@ REFACTOR → Improve without breaking tests
 
 ## Architecture Notes
 
+### Event-Driven Architecture (CRITICAL)
+
+**The correct flow:**
+```
+Request → Route (emit event) → Event Dispatcher → Handler(s) → Services → Database
+```
+
+**Key principles:**
+1. **Routes emit events** - Routes do NOT call services directly
+2. **Dispatcher routes** - Dispatcher routes events to registered handlers
+3. **Handlers orchestrate** - Handlers call services and perform side effects
+4. **Services are pure** - Services contain business logic only, NO event emission
+5. **Decoupled** - Each layer only knows about the next layer
+
+**Example:**
+```
+POST /auth/register
+    → Route emits UserRegisterEvent
+    → Dispatcher finds UserHandler
+    → UserHandler.handle_register():
+        → calls UserService.create_user()
+        → calls EmailService.send_welcome()
+        → calls SubscriptionService.create_free_tier()
+        → returns EventResult
+    → Route returns result to client
+```
+
 ### Plugin Architecture
 Payments and other extensible features use a **plugin pattern**:
 - Abstract base interface defines contract

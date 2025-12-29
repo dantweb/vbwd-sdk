@@ -1,0 +1,145 @@
+@startuml admin-flows
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title Admin Management - Key Flows
+
+== User Suspension Flow ==
+
+actor Admin
+participant "User List" as UserList
+participant "User Detail" as UserDetail
+participant "API Client" as API
+participant "Backend" as Backend
+participant "RBAC Service" as RBAC
+participant "Event Bus" as Events
+database "Database" as DB
+
+Admin -> UserList : Search for user
+UserList -> API : GET /api/admin/users?search=...
+API -> Backend : Request with admin JWT
+Backend -> RBAC : Check admin permission
+RBAC --> Backend : Authorized
+Backend -> DB : Query users
+DB --> Backend : User list
+Backend --> API : 200 OK (users)
+API --> UserList : Display results
+
+Admin -> UserList : Click user row
+UserList -> UserDetail : Open detail modal
+UserDetail -> API : GET /api/admin/users/:id
+API -> Backend : Fetch user details
+Backend --> API : User with roles, subscription
+API --> UserDetail : Display details
+
+Admin -> UserDetail : Click "Suspend User"
+UserDetail -> UserDetail : Show confirmation
+Admin -> UserDetail : Confirm
+UserDetail -> API : PUT /api/admin/users/:id/status
+API -> Backend : {status: "suspended"}
+Backend -> RBAC : Check permission
+RBAC --> Backend : Authorized
+Backend -> DB : Update user status
+DB --> Backend : Success
+Backend -> Events : Emit UserSuspended
+Events --> Backend : Event queued
+Backend --> API : 200 OK
+API --> UserDetail : Update UI
+UserDetail --> Admin : "User suspended"
+
+note right of Events
+  UserSuspended event triggers:
+  - Invalidate user sessions
+  - Send notification email
+  - Log audit trail
+end note
+
+== Plan Creation Flow ==
+
+participant "Plan List" as PlanList
+participant "Plan Form" as PlanForm
+participant "Feature Guard" as FeatureGuard
+
+Admin -> PlanList : Click "Create Plan"
+PlanList -> PlanForm : Open create form
+Admin -> PlanForm : Fill plan details
+note right of PlanForm
+  Plan details:
+  - Name, description
+  - Price (monthly/yearly)
+  - Features list
+  - Usage limits
+end note
+
+Admin -> PlanForm : Submit
+PlanForm -> API : POST /api/admin/plans
+API -> Backend : Request with plan data
+Backend -> RBAC : Check admin permission
+RBAC --> Backend : Authorized
+Backend -> Backend : Validate plan data
+Backend -> DB : Create plan record
+DB --> Backend : New plan ID
+Backend -> DB : Create feature associations
+DB --> Backend : Success
+Backend --> API : 201 Created (plan)
+API --> PlanForm : Success
+PlanForm -> PlanList : Refresh list
+PlanList --> Admin : "Plan created"
+
+== Subscription Extension Flow ==
+
+participant "Sub List" as SubList
+participant "Sub Detail" as SubDetail
+
+Admin -> SubList : Find subscription
+SubList -> API : GET /api/admin/subscriptions
+API --> SubList : Subscription list
+Admin -> SubList : Click subscription
+SubList -> SubDetail : Open detail
+SubDetail -> API : GET /api/admin/subscriptions/:id
+API --> SubDetail : Full details
+
+Admin -> SubDetail : Click "Extend"
+SubDetail -> SubDetail : Show extension form
+Admin -> SubDetail : Enter days to extend
+Admin -> SubDetail : Submit
+SubDetail -> API : PUT /api/admin/subscriptions/:id/extend
+API -> Backend : {days: 30, reason: "..."}
+Backend -> RBAC : Check permission
+RBAC --> Backend : Authorized
+Backend -> DB : Update end_date
+DB --> Backend : Success
+Backend -> Events : Emit SubscriptionExtended
+Events --> Backend : Event queued
+Backend --> API : 200 OK
+API --> SubDetail : Show new end date
+SubDetail --> Admin : "Extended by 30 days"
+
+== Invoice Refund Flow ==
+
+participant "Invoice List" as InvoiceList
+participant "Refund Form" as RefundForm
+participant "Payment Service" as Payment
+
+Admin -> InvoiceList : Find invoice
+InvoiceList -> API : GET /api/admin/invoices
+API --> InvoiceList : Invoice list
+Admin -> InvoiceList : Click "Refund"
+InvoiceList -> RefundForm : Open refund form
+Admin -> RefundForm : Enter amount & reason
+Admin -> RefundForm : Submit
+RefundForm -> API : POST /api/admin/invoices/:id/refund
+API -> Backend : {amount: 50, reason: "..."}
+Backend -> RBAC : Check permission
+RBAC --> Backend : Authorized
+Backend -> Payment : Process refund
+Payment --> Backend : Refund ID
+Backend -> DB : Update invoice status
+DB --> Backend : Success
+Backend -> Events : Emit InvoiceRefunded
+Events --> Backend : Event queued
+Backend --> API : 200 OK
+API --> RefundForm : Success
+RefundForm --> Admin : "Refund processed"
+
+@enduml

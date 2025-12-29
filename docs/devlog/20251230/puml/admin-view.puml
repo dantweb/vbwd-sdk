@@ -1,0 +1,137 @@
+@startuml admin-view
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+
+title Admin Management View - Component Diagram
+
+package "Admin Dashboard" as admin {
+
+  package "User Management" as users {
+    [User List Page] as userList
+    [User Search/Filter] as userSearch
+    [User Table] as userTable
+    [User Detail Modal] as userDetail
+    [Role Assignment Dialog] as roleAssign
+    [Suspend/Activate Action] as suspendAction
+    [Impersonate Button] as impersonate
+
+    userList --> userSearch
+    userList --> userTable
+    userTable --> userDetail : view
+    userDetail --> roleAssign : manage roles
+    userDetail --> suspendAction : status
+    userDetail --> impersonate : impersonate
+  }
+
+  package "Plan Management" as plans {
+    [Plan List Page] as planList
+    [Plan Table] as planTable
+    [Create Plan Form] as createPlan
+    [Edit Plan Form] as editPlan
+    [Feature/Limits Editor] as featureEditor
+    [Archive Plan Action] as archivePlan
+
+    planList --> planTable
+    planList --> createPlan : new
+    planTable --> editPlan : edit
+    editPlan --> featureEditor : features
+    planTable --> archivePlan : archive
+  }
+
+  package "Subscription Management" as subscriptions {
+    [Subscription List Page] as subList
+    [Subscription Table] as subTable
+    [Subscription Filters] as subFilters
+    [Subscription Detail Modal] as subDetail
+    [Extend Subscription Form] as extendSub
+    [Cancel Subscription Action] as cancelSub
+    [Apply Credits Form] as applyCredits
+
+    subList --> subFilters
+    subList --> subTable
+    subTable --> subDetail : view
+    subDetail --> extendSub : extend
+    subDetail --> cancelSub : cancel
+    subDetail --> applyCredits : credits
+  }
+
+  package "Invoice Management" as invoices {
+    [Invoice List Page] as invoiceList
+    [Invoice Table] as invoiceTable
+    [Invoice Stats Dashboard] as invoiceStats
+    [Refund Form] as refundForm
+    [Send Reminder Action] as sendReminder
+
+    invoiceList --> invoiceStats
+    invoiceList --> invoiceTable
+    invoiceTable --> refundForm : refund
+    invoiceTable --> sendReminder : remind
+  }
+}
+
+' Navigation
+[Admin Sidebar] as nav
+nav --> userList : /admin/users
+nav --> planList : /admin/plans
+nav --> subList : /admin/subscriptions
+nav --> invoiceList : /admin/invoices
+
+' API Integration
+cloud "Admin API" as api {
+  package "User APIs" {
+    [GET /api/admin/users]
+    [GET /api/admin/users/:id]
+    [PUT /api/admin/users/:id/status]
+    [PUT /api/admin/users/:id/roles]
+    [POST /api/admin/users/:id/impersonate]
+  }
+
+  package "Plan APIs" {
+    [GET /api/admin/plans]
+    [POST /api/admin/plans]
+    [PUT /api/admin/plans/:id]
+    [DELETE /api/admin/plans/:id]
+  }
+
+  package "Subscription APIs" {
+    [GET /api/admin/subscriptions]
+    [PUT /api/admin/subscriptions/:id/extend]
+    [POST /api/admin/subscriptions/:id/cancel]
+    [POST /api/admin/subscriptions/:id/credits]
+  }
+
+  package "Invoice APIs" {
+    [GET /api/admin/invoices]
+    [GET /api/admin/invoices/stats]
+    [POST /api/admin/invoices/:id/refund]
+    [POST /api/admin/invoices/:id/reminder]
+  }
+}
+
+' User Management connections
+userList ..> [GET /api/admin/users] : fetch
+userDetail ..> [GET /api/admin/users/:id] : fetch
+suspendAction ..> [PUT /api/admin/users/:id/status] : update
+roleAssign ..> [PUT /api/admin/users/:id/roles] : update
+impersonate ..> [POST /api/admin/users/:id/impersonate] : start session
+
+' Plan Management connections
+planList ..> [GET /api/admin/plans] : fetch
+createPlan ..> [POST /api/admin/plans] : create
+editPlan ..> [PUT /api/admin/plans/:id] : update
+archivePlan ..> [DELETE /api/admin/plans/:id] : archive
+
+' Subscription Management connections
+subList ..> [GET /api/admin/subscriptions] : fetch
+extendSub ..> [PUT /api/admin/subscriptions/:id/extend] : extend
+cancelSub ..> [POST /api/admin/subscriptions/:id/cancel] : cancel
+applyCredits ..> [POST /api/admin/subscriptions/:id/credits] : apply
+
+' Invoice Management connections
+invoiceList ..> [GET /api/admin/invoices] : fetch
+invoiceStats ..> [GET /api/admin/invoices/stats] : fetch
+refundForm ..> [POST /api/admin/invoices/:id/refund] : refund
+sendReminder ..> [POST /api/admin/invoices/:id/reminder] : send
+
+@enduml

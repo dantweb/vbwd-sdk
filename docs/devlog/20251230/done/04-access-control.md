@@ -1,10 +1,12 @@
-# Sprint 4: Access Control
+# Sprint 4: Access Control (Backend)
 
 **Priority:** HIGH
-**Duration:** 1-2 days
-**Focus:** Implement RBAC and tariff-based feature guards
+**Duration:** 1 day
+**Focus:** Implement backend RBAC and tariff-based feature guards
 
 > **Core Requirements:** See [sprint-plan.md](./sprint-plan.md) for mandatory TDD-first, SOLID, DI, Clean Code, and No Over-Engineering requirements.
+
+> **Note:** Frontend access control (guards, composables, components) has been moved to **Sprint 05-01** which depends on Sprint 05 (View Core Extraction).
 
 ---
 
@@ -282,137 +284,7 @@ class FeatureUsage(BaseModel):
 
 ---
 
-## 4.3 Frontend Access Control
-
-### Problem
-No frontend route guards or feature checks.
-
-### Requirements
-- Route guards based on authentication
-- Route guards based on role
-- Feature visibility based on plan
-- Usage limit display
-
-### Implementation
-
-**File:** `vbwd-frontend/core/src/guards/AuthGuard.ts`
-```typescript
-import type { RouteLocationNormalized, NavigationGuardNext } from 'vue-router';
-import { useAuthStore } from '../stores/auth';
-
-export function authGuard(
-  to: RouteLocationNormalized,
-  from: RouteLocationNormalized,
-  next: NavigationGuardNext
-): void {
-  const auth = useAuthStore();
-
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    next({ name: 'login', query: { redirect: to.fullPath } });
-    return;
-  }
-
-  if (to.meta.requiresGuest && auth.isAuthenticated) {
-    next({ name: 'dashboard' });
-    return;
-  }
-
-  next();
-}
-```
-
-**File:** `vbwd-frontend/core/src/guards/RoleGuard.ts`
-```typescript
-import type { RouteLocationNormalized, NavigationGuardNext } from 'vue-router';
-import { useAuthStore } from '../stores/auth';
-
-export function roleGuard(
-  to: RouteLocationNormalized,
-  from: RouteLocationNormalized,
-  next: NavigationGuardNext
-): void {
-  const auth = useAuthStore();
-  const requiredRoles = to.meta.roles as string[] | undefined;
-
-  if (!requiredRoles || requiredRoles.length === 0) {
-    next();
-    return;
-  }
-
-  const userRoles = auth.user?.roles || [];
-  const hasRole = requiredRoles.some(role => userRoles.includes(role));
-
-  if (!hasRole) {
-    next({ name: 'forbidden' });
-    return;
-  }
-
-  next();
-}
-```
-
-**File:** `vbwd-frontend/core/src/composables/useFeatureAccess.ts`
-```typescript
-import { ref, computed } from 'vue';
-import { useSubscriptionStore } from '../stores/subscription';
-
-export function useFeatureAccess() {
-  const subscription = useSubscriptionStore();
-
-  const canAccess = (featureName: string): boolean => {
-    return subscription.features.includes(featureName);
-  };
-
-  const getUsage = (featureName: string) => {
-    return subscription.usage[featureName] || { limit: 0, used: 0, remaining: 0 };
-  };
-
-  const isWithinLimit = (featureName: string, amount: number = 1): boolean => {
-    const usage = getUsage(featureName);
-    return usage.remaining >= amount;
-  };
-
-  return {
-    canAccess,
-    getUsage,
-    isWithinLimit,
-    features: computed(() => subscription.features),
-    usage: computed(() => subscription.usage),
-  };
-}
-```
-
-**File:** `vbwd-frontend/core/src/components/FeatureGate.vue`
-```vue
-<template>
-  <slot v-if="hasAccess" />
-  <slot v-else name="fallback">
-    <div class="feature-locked">
-      <p>This feature requires {{ requiredPlan }} plan</p>
-      <button @click="$emit('upgrade')">Upgrade Now</button>
-    </div>
-  </slot>
-</template>
-
-<script setup lang="ts">
-import { computed } from 'vue';
-import { useFeatureAccess } from '../composables/useFeatureAccess';
-
-const props = defineProps<{
-  feature: string;
-  requiredPlan?: string;
-}>();
-
-defineEmits(['upgrade']);
-
-const { canAccess } = useFeatureAccess();
-const hasAccess = computed(() => canAccess(props.feature));
-</script>
-```
-
----
-
-## 4.4 Permission Decorators
+## 4.3 Permission Decorators
 
 ### Problem
 No convenient way to protect routes with permissions.
@@ -517,19 +389,14 @@ def export_data():
 - [ ] Usage tracking repository
 - [ ] All tests pass
 
-### 4.3 Frontend Access Control
-- [ ] AuthGuard implemented
-- [ ] RoleGuard implemented
-- [ ] useFeatureAccess composable
-- [ ] FeatureGate component
-- [ ] Tests for guards
-
-### 4.4 Permission Decorators
+### 4.3 Permission Decorators
 - [ ] require_permission decorator
 - [ ] require_all_permissions decorator
 - [ ] require_feature decorator
 - [ ] Tests for decorators
 - [ ] All tests pass
+
+> **Frontend Access Control** → See [Sprint 05-01](./05-01-frontend-access-control.md)
 
 ---
 

@@ -10,21 +10,24 @@
 
 ## Event-Driven Architecture Overview
 
-The entire system uses **event-driven architecture**. All business operations emit events that are handled asynchronously by dedicated handlers.
+The entire system uses **event-driven architecture**. Routes emit events, handlers process them and call services.
 
 ### Event Flow Pattern
 ```
-┌─────────┐     ┌─────────┐     ┌─────────────────┐     ┌────────────────┐
-│ Route/  │ ──▶ │ Service │ ──▶ │ EventDispatcher │ ──▶ │ Handler 1      │
-│ Command │     │         │     │                 │     │ (send email)   │
-└─────────┘     └────┬────┘     │                 │ ──▶ ├────────────────┤
-                     │          │                 │     │ Handler 2      │
-                     ▼          │                 │ ──▶ │ (log activity) │
-                 Database       └─────────────────┘     ├────────────────┤
-                                                        │ Handler 3      │
-                                                        │ (update cache) │
-                                                        └────────────────┘
+┌─────────┐     ┌─────────────────┐     ┌────────────────┐     ┌─────────┐     ┌──────────┐
+│ Route   │ ──▶ │ EventDispatcher │ ──▶ │ Handler 1      │ ──▶ │ Service │ ──▶ │ Database │
+│ (emit)  │     │                 │     │ (orchestrate)  │     │ (logic) │     │          │
+└─────────┘     │                 │ ──▶ ├────────────────┤     └─────────┘     └──────────┘
+                │                 │     │ Handler 2      │
+                │                 │ ──▶ │ (side effects) │
+                └─────────────────┘     └────────────────┘
 ```
+
+### Key Principles
+1. **Routes emit events** - Routes do NOT call services directly
+2. **Handlers orchestrate** - Handlers call services and perform side effects
+3. **Services are pure** - Services contain business logic, no event emission
+4. **Decoupled** - Each layer only knows about the next layer
 
 ### Event Categories
 
@@ -191,66 +194,90 @@ def register_security_handlers(dispatcher: EventDispatcher, container) -> None:
 ### Problem
 User event handlers are stubbed - they log but don't perform actions.
 
+### Architecture
+```
+Route (register) → emit UserRegisterEvent → Dispatcher → UserHandler → Services → DB
+```
+
 ### Current State
 ```python
-# src/services/events/handlers/user_handlers.py
+# src/handlers/user_handlers.py
 class UserEventHandler:
     def handle_user_registered(self, event: UserRegisteredEvent):
         logger.info(f"User registered: {event.user_id}")
-        # TODO: Send welcome email
-        # TODO: Create default subscription
+        # TODO: Call services to do actual work
 ```
 
 ### Requirements
-- Welcome email on registration
-- Default free tier subscription creation
-- User profile initialization
-- Activity logging
+- Handler calls UserService to create user
+- Handler calls EmailService to send welcome email
+- Handler calls SubscriptionService to create free tier
+- Handler logs activity
 
 ### TDD Tests First
 
-**File:** `tests/unit/services/events/handlers/test_user_handlers.py`
+**File:** `tests/unit/handlers/test_user_handlers.py`
 ```python
 class TestUserEventHandler:
-    def test_handle_user_registered_sends_welcome_email(self):
-        """Welcome email should be sent on registration."""
+    def test_handle_user_register_creates_user(self):
+        """User created via UserService when event received."""
         pass
 
-    def test_handle_user_registered_creates_default_subscription(self):
+    def test_handle_user_register_sends_welcome_email(self):
+        """Welcome email sent after user created."""
+        pass
+
+    def test_handle_user_register_creates_default_subscription(self):
         """Free tier subscription created for new user."""
         pass
 
-    def test_handle_user_updated_logs_changes(self):
-        """User profile changes should be logged."""
-        pass
-
-    def test_handle_user_deleted_cleans_up_data(self):
-        """User deletion should clean up related data."""
+    def test_handle_user_register_returns_result(self):
+        """Handler returns EventResult with user_id."""
         pass
 ```
 
 ### Implementation
 
 **Files to modify:**
-- `src/services/events/handlers/user_handlers.py` - COMPLETE implementation
+- `src/handlers/user_handlers.py` - COMPLETE implementation
 
 **Handler Logic:**
 ```python
+from src.events.domain import EventResult
+
 class UserEventHandler:
-    def __init__(self, email_service, subscription_service, activity_logger):
+    """
+    Handles user events.
+
+    Flow: Route emits event → This handler → Calls services → Returns result
+    """
+
+    def __init__(self, user_service, email_service, subscription_service, activity_logger):
+        self.user_service = user_service
         self.email_service = email_service
         self.subscription_service = subscription_service
         self.activity_logger = activity_logger
 
-    def handle_user_registered(self, event: UserRegisteredEvent):
-        # 1. Send welcome email
-        self.email_service.send_welcome(event.email)
+    def handle_user_register(self, event: UserRegisterEvent) -> EventResult:
+        # 1. Call service to create user
+        result = self.user_service.create_user(event.email, event.password)
 
-        # 2. Create free tier subscription
-        self.subscription_service.create_free_subscription(event.user_id)
+        if not result.success:
+            return EventResult.error_result(result.error)
 
-        # 3. Log activity
-        self.activity_logger.log("user_registered", user_id=event.user_id)
+        # 2. Send welcome email
+        self.email_service.send_welcome(result.user.email)
+
+        # 3. Create free tier subscription
+        self.subscription_service.create_free_subscription(result.user.id)
+
+        # 4. Log activity
+        self.activity_logger.log("user_registered", user_id=result.user.id)
+
+        return EventResult.success_result({
+            "user_id": str(result.user.id),
+            "token": result.token
+        })
 ```
 
 ---

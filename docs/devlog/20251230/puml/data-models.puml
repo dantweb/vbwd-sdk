@@ -1,0 +1,200 @@
+@startuml data-models
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam classAttributeIconSize 0
+
+title User Cabinet & Admin - Data Models
+
+package "User Domain" {
+  class User {
+    +id: UUID
+    +email: String
+    +password_hash: String
+    +first_name: String
+    +last_name: String
+    +avatar_url: String
+    +status: UserStatus
+    +created_at: DateTime
+    +updated_at: DateTime
+    --
+    +roles: Role[]
+    +subscription: Subscription
+    +invoices: Invoice[]
+  }
+
+  enum UserStatus {
+    ACTIVE
+    SUSPENDED
+    PENDING
+    DELETED
+  }
+}
+
+package "RBAC Domain" {
+  class Role {
+    +id: UUID
+    +name: String
+    +description: String
+    --
+    +permissions: Permission[]
+    +users: User[]
+  }
+
+  class Permission {
+    +id: UUID
+    +name: String
+    +description: String
+    --
+    +roles: Role[]
+  }
+
+  User "many" -- "many" Role
+  Role "many" -- "many" Permission
+}
+
+package "Subscription Domain" {
+  class Plan {
+    +id: UUID
+    +name: String
+    +description: String
+    +price_monthly: Decimal
+    +price_yearly: Decimal
+    +is_active: Boolean
+    +is_archived: Boolean
+    +created_at: DateTime
+    --
+    +features: PlanFeature[]
+    +limits: PlanLimit[]
+  }
+
+  class PlanFeature {
+    +id: UUID
+    +plan_id: UUID
+    +feature_name: String
+    +is_enabled: Boolean
+  }
+
+  class PlanLimit {
+    +id: UUID
+    +plan_id: UUID
+    +feature_name: String
+    +limit_value: Integer
+    +period: LimitPeriod
+  }
+
+  enum LimitPeriod {
+    DAILY
+    WEEKLY
+    MONTHLY
+    YEARLY
+  }
+
+  class Subscription {
+    +id: UUID
+    +user_id: UUID
+    +plan_id: UUID
+    +status: SubscriptionStatus
+    +billing_cycle: BillingCycle
+    +start_date: DateTime
+    +end_date: DateTime
+    +cancelled_at: DateTime
+    +created_at: DateTime
+    --
+    +user: User
+    +plan: Plan
+    +usage: FeatureUsage[]
+  }
+
+  enum SubscriptionStatus {
+    ACTIVE
+    CANCELLED
+    EXPIRED
+    SUSPENDED
+    TRIAL
+  }
+
+  enum BillingCycle {
+    MONTHLY
+    YEARLY
+  }
+
+  class FeatureUsage {
+    +id: UUID
+    +subscription_id: UUID
+    +feature_name: String
+    +used_amount: Integer
+    +period_start: DateTime
+    +period_end: DateTime
+    --
+    +subscription: Subscription
+  }
+
+  Plan "1" -- "many" PlanFeature
+  Plan "1" -- "many" PlanLimit
+  Plan "1" -- "many" Subscription
+  User "1" -- "0..1" Subscription
+  Subscription "1" -- "many" FeatureUsage
+}
+
+package "Billing Domain" {
+  class Invoice {
+    +id: UUID
+    +user_id: UUID
+    +subscription_id: UUID
+    +invoice_number: String
+    +amount: Decimal
+    +tax_amount: Decimal
+    +total_amount: Decimal
+    +status: InvoiceStatus
+    +due_date: DateTime
+    +paid_at: DateTime
+    +created_at: DateTime
+    --
+    +user: User
+    +subscription: Subscription
+    +items: InvoiceItem[]
+    +payments: Payment[]
+  }
+
+  enum InvoiceStatus {
+    DRAFT
+    PENDING
+    PAID
+    OVERDUE
+    CANCELLED
+    REFUNDED
+  }
+
+  class InvoiceItem {
+    +id: UUID
+    +invoice_id: UUID
+    +description: String
+    +quantity: Integer
+    +unit_price: Decimal
+    +amount: Decimal
+  }
+
+  class Payment {
+    +id: UUID
+    +invoice_id: UUID
+    +amount: Decimal
+    +payment_method: String
+    +transaction_id: String
+    +status: PaymentStatus
+    +created_at: DateTime
+  }
+
+  enum PaymentStatus {
+    PENDING
+    COMPLETED
+    FAILED
+    REFUNDED
+  }
+
+  User "1" -- "many" Invoice
+  Subscription "1" -- "many" Invoice
+  Invoice "1" -- "many" InvoiceItem
+  Invoice "1" -- "many" Payment
+}
+
+@enduml

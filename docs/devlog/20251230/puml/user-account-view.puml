@@ -1,0 +1,94 @@
+@startuml user-account-view
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+
+title User Account View - Component Diagram
+
+package "User Cabinet" as cabinet {
+
+  package "Profile Management" as profile {
+    [Profile View Page] as profileView
+    [Edit Profile Form] as editProfile
+    [Change Password Form] as changePassword
+    [Delete Account Dialog] as deleteAccount
+
+    profileView --> editProfile : edit
+    profileView --> changePassword : security
+    profileView --> deleteAccount : danger zone
+  }
+
+  package "Subscription View" as subscription {
+    [Subscription Dashboard] as subDashboard
+    [Current Plan Card] as planCard
+    [Features List] as featuresList
+    [Usage Limits Display] as usageLimits
+    [Cancel Subscription Dialog] as cancelSub
+
+    subDashboard --> planCard
+    subDashboard --> featuresList
+    subDashboard --> usageLimits
+    subDashboard --> cancelSub : cancel
+  }
+
+  package "Invoice History" as invoices {
+    [Invoice List Page] as invoiceList
+    [Invoice Table] as invoiceTable
+    [Pagination Control] as pagination
+    [Download PDF Button] as downloadPdf
+
+    invoiceList --> invoiceTable
+    invoiceTable --> pagination
+    invoiceTable --> downloadPdf : per row
+  }
+
+  package "Plan Selection" as plans {
+    [Plan Comparison Page] as planComparison
+    [Plan Card Grid] as planCards
+    [Feature Comparison Table] as featureCompare
+    [Proration Calculator] as proration
+    [Upgrade/Downgrade Dialog] as upgradeDialog
+
+    planComparison --> planCards
+    planComparison --> featureCompare
+    planCards --> upgradeDialog : select plan
+    upgradeDialog --> proration : calculate
+  }
+}
+
+' Navigation
+[Sidebar Navigation] as nav
+nav --> profileView : /account/profile
+nav --> subDashboard : /account/subscription
+nav --> invoiceList : /account/invoices
+nav --> planComparison : /account/plans
+
+' API Integration
+cloud "Backend API" as api {
+  [GET /api/user/profile]
+  [PUT /api/user/profile]
+  [POST /api/user/password]
+  [DELETE /api/user/account]
+  [GET /api/subscription]
+  [POST /api/subscription/cancel]
+  [GET /api/invoices]
+  [GET /api/invoices/:id/pdf]
+  [GET /api/plans]
+  [POST /api/subscription/upgrade]
+}
+
+profileView ..> [GET /api/user/profile] : fetch
+editProfile ..> [PUT /api/user/profile] : update
+changePassword ..> [POST /api/user/password] : change
+deleteAccount ..> [DELETE /api/user/account] : delete
+
+subDashboard ..> [GET /api/subscription] : fetch
+cancelSub ..> [POST /api/subscription/cancel] : cancel
+
+invoiceList ..> [GET /api/invoices] : fetch
+downloadPdf ..> [GET /api/invoices/:id/pdf] : download
+
+planComparison ..> [GET /api/plans] : fetch
+upgradeDialog ..> [POST /api/subscription/upgrade] : upgrade
+
+@enduml

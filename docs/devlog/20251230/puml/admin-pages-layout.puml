@@ -1,0 +1,147 @@
+@startuml admin-pages-layout
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+skinparam roundCorner 8
+
+title Admin Dashboard - Page Layouts with Demo Content
+
+rectangle "User Management Page" as users #FBE9E7 {
+  rectangle "Header" as uh #FF8A65 {
+    label "  **VBWD Admin**  |  Users  |  Plans  |  Subscriptions  |  Invoices  |  [Admin ▼]  " as uhl
+  }
+
+  rectangle "Sidebar" as us #FFCCBC {
+    label "**MANAGEMENT**\n────────────\n→ Users\n  Plans\n  Subscriptions\n  Invoices\n────────────\n**SYSTEM**\n  Settings\n  Audit Logs\n────────────\n  Back to App" as usl
+  }
+
+  rectangle "Content" as uc #FFFFFF {
+    rectangle "Stats Row" as ucsr #F5F5F5 {
+      label "Total Users: **1,234**  |  Active: **1,156**  |  Suspended: **23**  |  Pending: **55**" as ucsrl
+    }
+
+    rectangle "Filters" as ucf #FAFAFA {
+      label "Search: [________________]  Status: [All Users ▼]  Role: [All Roles ▼]  Plan: [All Plans ▼]  [ Search ]" as ucfl
+    }
+
+    rectangle "User Table" as uct #F5F5F5 {
+      label "**Users**\n┌────┬─────────────────┬──────────────────────┬───────────┬─────────┬──────────────┬─────────┐\n│ ID │ Name            │ Email                │ Status    │ Role    │ Subscription │ Actions │\n├────┼─────────────────┼──────────────────────┼───────────┼─────────┼──────────────┼─────────┤\n│ 1  │ John Doe        │ john@acme.com        │ ● Active  │ User    │ Pro          │ [•••]   │\n│ 2  │ Jane Smith      │ jane@corp.io         │ ● Active  │ Admin   │ Enterprise   │ [•••]   │\n│ 3  │ Bob Wilson      │ bob@startup.co       │ ○ Suspend │ User    │ Free         │ [•••]   │\n│ 4  │ Alice Brown     │ alice@agency.net     │ ● Active  │ User    │ Pro          │ [•••]   │\n│ 5  │ Charlie Lee     │ charlie@tech.org     │ ◐ Pending │ User    │ -            │ [•••]   │\n│ 6  │ Diana Ross      │ diana@media.com      │ ● Active  │ Manager │ Pro          │ [•••]   │\n│ 7  │ Edward Kim      │ edward@design.io     │ ● Active  │ User    │ Free         │ [•••]   │\n│ 8  │ Fiona Chen      │ fiona@retail.biz     │ ● Active  │ User    │ Pro          │ [•••]   │\n└────┴─────────────────┴──────────────────────┴───────────┴─────────┴──────────────┴─────────┘\n\n[ ← Prev ]  Page 1 of 155  [ Next → ]   |   Showing 1-8 of 1,234 users   |   [ Export CSV ]" as uctl
+    }
+  }
+}
+
+newpage
+
+rectangle "User Detail Modal" as userdetail #FBE9E7 {
+  rectangle "Background" as udb #E0E0E080 {
+    rectangle "Modal" as udm #FFFFFF {
+      label "**User Details: John Doe**                                              [ × ]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n┌─────────────────────────────┬──────────────────────────────────────────┐\n│  [Avatar]                   │  **Quick Actions**                       │\n│    J.D.                     │  [ Suspend User ]  [ Activate User ]     │\n│                             │  [ Reset Password ]                      │\n│  **John Doe**               │  [ Impersonate User ]                    │\n│  john@acme.com              │  [ Delete User ]                         │\n│  Status: ● Active           │                                          │\n│  Joined: Jan 15, 2024       │                                          │\n└─────────────────────────────┴──────────────────────────────────────────┘\n\n**Profile Information**\n────────────────────────────────────────────────────────────────────────\n  First Name:   John               Phone:        +1 555 123 4567\n  Last Name:    Doe                Company:      Acme Corporation\n  Email:        john@acme.com      Last Login:   Dec 28, 2024 14:32 UTC\n  Created:      Jan 15, 2024       IP Address:   192.168.1.105\n\n**Roles & Permissions**\n────────────────────────────────────────────────────────────────────────\n  Current Roles: [User]  [ + Add Role ]\n  \n  Available Roles: [ Admin ▼ ] [ Assign ]\n\n**Subscription**\n────────────────────────────────────────────────────────────────────────\n  Plan: Pro ($29/mo)  |  Status: Active  |  Expires: Jan 15, 2025\n  Usage: API 4,231/10,000  |  Storage 7.2/10 GB\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n[ Close ]                                                  [ Save Changes ]" as udml
+    }
+  }
+}
+
+newpage
+
+rectangle "Plan Management Page" as plans #E8F5E9 {
+  rectangle "Header" as plh #81C784 {
+    label "  **VBWD Admin**  |  Users  |  Plans  |  Subscriptions  |  Invoices  |  [Admin ▼]  " as plhl
+  }
+
+  rectangle "Sidebar" as pls #C8E6C9 {
+    label "**MANAGEMENT**\n────────────\n  Users\n→ Plans\n  Subscriptions\n  Invoices\n────────────\n**SYSTEM**\n  Settings\n  Audit Logs\n────────────\n  Back to App" as plsl
+  }
+
+  rectangle "Content" as plc #FFFFFF {
+    rectangle "Header Row" as plchr #F5F5F5 {
+      label "**Plan Management**                                              [ + Create New Plan ]" as plchrl
+    }
+
+    rectangle "Plan Table" as plct #F5F5F5 {
+      label "**Plans**\n┌────┬───────────────┬────────────┬────────────┬─────────┬───────────┬────────────────────┐\n│ ID │ Plan Name     │ Monthly    │ Yearly     │ Users   │ Status    │ Actions            │\n├────┼───────────────┼────────────┼────────────┼─────────┼───────────┼────────────────────┤\n│ 1  │ Free          │ $0         │ $0         │ 1,234   │ ● Active  │ [Edit] [Archive]   │\n│ 2  │ Pro           │ $29        │ $290       │ 567     │ ● Active  │ [Edit] [Archive]   │\n│ 3  │ Enterprise    │ Custom     │ Custom     │ 45      │ ● Active  │ [Edit] [Archive]   │\n│ 4  │ Starter       │ $9         │ $90        │ 234     │ ● Active  │ [Edit] [Archive]   │\n│ 5  │ Legacy Pro    │ $19        │ $190       │ 23      │ ○ Archived│ [View] [Restore]   │\n│ 6  │ Beta Tester   │ $0         │ $0         │ 12      │ ○ Archived│ [View] [Restore]   │\n└────┴───────────────┴────────────┴────────────┴─────────┴───────────┴────────────────────┘\n\nShowing 6 plans  |  Active: 4  |  Archived: 2" as plctl
+    }
+  }
+}
+
+newpage
+
+rectangle "Plan Edit Form" as planedit #E8F5E9 {
+  rectangle "Background" as peb #E0E0E080 {
+    rectangle "Modal" as pem #FFFFFF {
+      label "**Edit Plan: Pro**                                                    [ × ]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**Basic Information**\n────────────────────────────────────────────────────────────────────────\n  Plan Name:        [Pro________________________]\n  Description:      [Professional plan for growing teams_______________]\n  Monthly Price:    [$29.00_____]    Yearly Price:    [$290.00____]\n  Status:           [● Active ▼]\n\n**Features**\n────────────────────────────────────────────────────────────────────────\n  [✓] Unlimited projects          [✓] Priority support\n  [✓] API access                  [✓] Custom integrations  \n  [✓] Advanced analytics          [✓] Team collaboration\n  [ ] White-label                 [ ] Dedicated support\n  [ ] SSO/SAML                    [ ] SLA guarantee\n  \n  [ + Add Custom Feature ]\n\n**Usage Limits**\n────────────────────────────────────────────────────────────────────────\n  Feature          Limit        Period        Actions\n  ─────────────────────────────────────────────────────\n  API Calls        [10,000___]  [Monthly ▼]   [Remove]\n  Storage (GB)     [10_______]  [Total ▼]     [Remove]\n  Team Members     [10_______]  [Total ▼]     [Remove]\n  Projects         [Unlimited]  [Total ▼]     [Remove]\n  \n  [ + Add Usage Limit ]\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n[ Cancel ]    [ Delete Plan ]                              [ Save Plan ]" as peml
+    }
+  }
+}
+
+newpage
+
+rectangle "Subscription Management Page" as subs #E3F2FD {
+  rectangle "Header" as subh #64B5F6 {
+    label "  **VBWD Admin**  |  Users  |  Plans  |  Subscriptions  |  Invoices  |  [Admin ▼]  " as subhl
+  }
+
+  rectangle "Sidebar" as subs2 #BBDEFB {
+    label "**MANAGEMENT**\n────────────\n  Users\n  Plans\n→ Subscriptions\n  Invoices\n────────────\n**SYSTEM**\n  Settings\n  Audit Logs\n────────────\n  Back to App" as subsl
+  }
+
+  rectangle "Content" as subc #FFFFFF {
+    rectangle "Stats Row" as subcsr #F5F5F5 {
+      label "Total: **846**  |  Active: **789**  |  Cancelled: **34**  |  Expired: **12**  |  Trial: **11**  |  MRR: **$24,531**" as subcsrl
+    }
+
+    rectangle "Filters" as subcf #FAFAFA {
+      label "Search: [________________]  Status: [All ▼]  Plan: [All Plans ▼]  [ Search ]  [ Export CSV ]" as subcfl
+    }
+
+    rectangle "Subscription Table" as subct #F5F5F5 {
+      label "**Subscriptions**\n┌────┬─────────────────┬────────────┬───────────┬──────────────┬──────────────┬──────────┐\n│ ID │ User            │ Plan       │ Status    │ Start Date   │ End Date     │ Actions  │\n├────┼─────────────────┼────────────┼───────────┼──────────────┼──────────────┼──────────┤\n│ 1  │ John Doe        │ Pro        │ ● Active  │ Jan 15, 2024 │ Jan 15, 2025 │ [•••]    │\n│ 2  │ Jane Smith      │ Enterprise │ ● Active  │ Mar 01, 2024 │ Mar 01, 2025 │ [•••]    │\n│ 3  │ Bob Wilson      │ Pro        │ ○ Cancel  │ Jun 01, 2024 │ Dec 31, 2024 │ [•••]    │\n│ 4  │ Alice Brown     │ Free       │ ● Active  │ Feb 20, 2024 │ -            │ [•••]    │\n│ 5  │ Charlie Lee     │ Starter    │ ◐ Trial   │ Dec 15, 2024 │ Dec 29, 2024 │ [•••]    │\n│ 6  │ Diana Ross      │ Pro        │ ● Active  │ Apr 10, 2024 │ Apr 10, 2025 │ [•••]    │\n│ 7  │ Edward Kim      │ Pro        │ ⚠ Expiring│ Jan 02, 2024 │ Jan 02, 2025 │ [•••]    │\n│ 8  │ Fiona Chen      │ Enterprise │ ● Active  │ May 15, 2024 │ May 15, 2025 │ [•••]    │\n└────┴─────────────────┴────────────┴───────────┴──────────────┴──────────────┴──────────┘\n\n[ ← Prev ]  Page 1 of 106  [ Next → ]   |   Showing 1-8 of 846 subscriptions" as subctl
+    }
+  }
+}
+
+newpage
+
+rectangle "Subscription Detail Modal" as subdetail #E3F2FD {
+  rectangle "Background" as sdb #E0E0E080 {
+    rectangle "Modal" as sdm #FFFFFF {
+      label "**Subscription Details: John Doe**                                    [ × ]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n┌─────────────────────────────────────┬──────────────────────────────────┐\n│  **User Information**               │  **Subscription Details**        │\n│  Name:    John Doe                  │  Plan:     Pro                   │\n│  Email:   john@acme.com             │  Status:   ● Active              │\n│  Company: Acme Corporation          │  Billing:  Monthly ($29.00)      │\n│                                     │  Start:    Jan 15, 2024          │\n│                                     │  End:      Jan 15, 2025          │\n│                                     │  Days Left: 17                   │\n└─────────────────────────────────────┴──────────────────────────────────┘\n\n**Usage Statistics**\n────────────────────────────────────────────────────────────────────────\n  API Calls:    ████████░░░░░░░░  4,231 / 10,000   (42.3%)\n  Storage:      ██████████████░░  7.2 GB / 10 GB   (72.0%)\n  Team Members: ████░░░░░░░░░░░░  2 / 10           (20.0%)\n\n**Admin Actions**\n────────────────────────────────────────────────────────────────────────\n  Extend Subscription:   [30____] days   Reason: [________________]  [ Extend ]\n  Apply Credit:          [$_____] USD    Reason: [________________]  [ Apply ]\n  \n  [ Cancel Subscription ]    [ Change Plan ]    [ View Invoices ]\n\n**History**\n────────────────────────────────────────────────────────────────────────\n  Dec 15, 2024  Payment received    $29.00   Invoice #INV-2024-012\n  Nov 15, 2024  Payment received    $29.00   Invoice #INV-2024-011\n  Oct 15, 2024  Payment received    $29.00   Invoice #INV-2024-010\n  Jan 15, 2024  Subscription start  Pro plan activated\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n[ Close ]" as sdml
+    }
+  }
+}
+
+newpage
+
+rectangle "Invoice Management Page" as invs #FFF3E0 {
+  rectangle "Header" as invh #FFB74D {
+    label "  **VBWD Admin**  |  Users  |  Plans  |  Subscriptions  |  Invoices  |  [Admin ▼]  " as invhl
+  }
+
+  rectangle "Sidebar" as invs2 #FFE0B2 {
+    label "**MANAGEMENT**\n────────────\n  Users\n  Plans\n  Subscriptions\n→ Invoices\n────────────\n**SYSTEM**\n  Settings\n  Audit Logs\n────────────\n  Back to App" as invsl
+  }
+
+  rectangle "Content" as invc #FFFFFF {
+    rectangle "Stats Dashboard" as invcsd #F5F5F5 {
+      label "┌─────────────────┬─────────────────┬─────────────────┬─────────────────┐\n│  **$12,450**    │  **$45,230**    │  **23**         │  **5**          │\n│  This Month     │  This Quarter   │  Pending        │  Overdue        │\n└─────────────────┴─────────────────┴─────────────────┴─────────────────┘" as invcsrl
+    }
+
+    rectangle "Filters" as invcf #FAFAFA {
+      label "Search: [________________]  Status: [All ▼]  Date: [This Month ▼]  [ Search ]  [ Export ]" as invcfl
+    }
+
+    rectangle "Invoice Table" as invct #F5F5F5 {
+      label "**Invoices**\n┌──────────────┬─────────────────┬────────────┬───────────┬──────────────┬────────────────────┐\n│ Invoice #    │ User            │ Amount     │ Status    │ Due Date     │ Actions            │\n├──────────────┼─────────────────┼────────────┼───────────┼──────────────┼────────────────────┤\n│ INV-2024-156 │ John Doe        │ $29.00     │ ● Paid    │ Dec 15, 2024 │ [View]             │\n│ INV-2024-155 │ Jane Smith      │ $299.00    │ ● Paid    │ Dec 15, 2024 │ [View]             │\n│ INV-2024-154 │ Bob Wilson      │ $29.00     │ ◐ Pending │ Dec 20, 2024 │ [View] [Remind]    │\n│ INV-2024-153 │ Alice Brown     │ $9.00      │ ○ Overdue │ Dec 10, 2024 │ [View] [Remind]    │\n│ INV-2024-152 │ Charlie Lee     │ $29.00     │ ↩ Refund  │ Dec 05, 2024 │ [View]             │\n│ INV-2024-151 │ Diana Ross      │ $29.00     │ ● Paid    │ Dec 01, 2024 │ [View]             │\n│ INV-2024-150 │ Edward Kim      │ $0.00      │ ● Paid    │ Dec 01, 2024 │ [View]             │\n│ INV-2024-149 │ Fiona Chen      │ $299.00    │ ● Paid    │ Nov 30, 2024 │ [View]             │\n└──────────────┴─────────────────┴────────────┴───────────┴──────────────┴────────────────────┘\n\n[ ← Prev ]  Page 1 of 20  [ Next → ]   |   Showing 1-8 of 156 invoices" as invctl
+    }
+  }
+}
+
+newpage
+
+rectangle "Invoice Refund Modal" as refund #FFF3E0 {
+  rectangle "Background" as rfb #E0E0E080 {
+    rectangle "Modal" as rfm #FFFFFF {
+      label "**Process Refund: INV-2024-153**                                      [ × ]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**Invoice Details**\n────────────────────────────────────────────────────────────────────────\n  Invoice Number:   INV-2024-153\n  User:             Alice Brown (alice@agency.net)\n  Original Amount:  $9.00\n  Issue Date:       Dec 01, 2024\n  Due Date:         Dec 10, 2024\n  Status:           ○ Overdue (19 days)\n\n**Refund Information**\n────────────────────────────────────────────────────────────────────────\n  Refund Type:      (●) Full Refund ($9.00)\n                    ( ) Partial Refund\n  \n  Refund Amount:    [$9.00______]\n  \n  Reason:           [Customer requested cancellation________________]\n                    [within the 30-day refund period._______________]\n                    [________________________________________________]\n  \n  Notify Customer:  [✓] Send refund confirmation email\n\n**Refund Preview**\n────────────────────────────────────────────────────────────────────────\n  Original Amount:     $9.00\n  Refund Amount:      -$9.00\n  ─────────────────────────\n  Final Amount:        $0.00\n  \n  Payment Method:      Visa •••• 4242\n  Estimated Arrival:   3-5 business days\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n[ Cancel ]                                          [ Process Refund ]" as rfml
+    }
+  }
+}
+
+@enduml

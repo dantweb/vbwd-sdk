@@ -1,0 +1,78 @@
+@startuml user-flows
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title User Account - Key Flows
+
+== Profile Update Flow ==
+
+actor User
+participant "Profile Page" as Profile
+participant "Auth Store" as AuthStore
+participant "API Client" as API
+participant "Backend" as Backend
+database "Database" as DB
+
+User -> Profile : Edit profile
+Profile -> Profile : Show edit form
+User -> Profile : Submit changes
+Profile -> API : PUT /api/user/profile
+API -> Backend : Request with JWT
+Backend -> Backend : Validate token
+Backend -> DB : Update user record
+DB --> Backend : Success
+Backend --> API : 200 OK (updated user)
+API --> Profile : Update success
+Profile -> AuthStore : setUser(updatedUser)
+Profile --> User : Show success message
+
+== Password Change Flow ==
+
+User -> Profile : Click "Change Password"
+Profile -> Profile : Show password form
+User -> Profile : Enter old + new password
+Profile -> API : POST /api/user/password
+API -> Backend : Request with JWT
+Backend -> Backend : Verify old password
+alt Old password correct
+  Backend -> DB : Update password hash
+  DB --> Backend : Success
+  Backend --> API : 200 OK
+  API --> Profile : Success
+  Profile --> User : "Password changed"
+else Old password incorrect
+  Backend --> API : 401 Unauthorized
+  API --> Profile : Error
+  Profile --> User : "Incorrect password"
+end
+
+== Plan Upgrade Flow ==
+
+participant "Plans Page" as Plans
+participant "Subscription Store" as SubStore
+participant "Payment Service" as Payment
+
+User -> Plans : View available plans
+Plans -> API : GET /api/plans
+API -> Backend : Fetch plans
+Backend --> API : Plan list
+API --> Plans : Display plans
+User -> Plans : Select "Pro" plan
+Plans -> Plans : Show upgrade dialog
+Plans -> API : GET /api/subscription/prorate?plan=pro
+API -> Backend : Calculate proration
+Backend --> API : Proration details
+API --> Plans : Show price difference
+User -> Plans : Confirm upgrade
+Plans -> API : POST /api/subscription/upgrade
+API -> Backend : Process upgrade
+Backend -> Payment : Charge prorated amount
+Payment --> Backend : Payment success
+Backend -> DB : Update subscription
+DB --> Backend : Success
+Backend --> API : 200 OK (new subscription)
+API --> Plans : Upgrade success
+Plans -> SubStore : setSubscription(newSub)
+Plans --> User : "Upgraded to Pro!"
+
+@enduml

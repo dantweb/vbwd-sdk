@@ -11,14 +11,14 @@
 ## Event-Driven Architecture Note
 
 All security operations use the **event-driven pattern**:
-- Services emit events (e.g., `PasswordResetRequestedEvent`)
-- Handlers perform side effects (e.g., send email)
+- Routes emit events (e.g., `PasswordResetRequestedEvent`)
+- Event Dispatcher routes to Handler(s)
+- Handlers call Services to perform business logic
+- Services interact with Database
 - Decoupled, testable, extensible
 
 ```
-User Request → Service → Event Dispatcher → Handler(s)
-                ↓
-            Database
+Request → Route (emit event) → Event Dispatcher → Handler(s) → Services → Database
 ```
 
 ---
@@ -30,50 +30,50 @@ Users cannot recover their accounts if they forget their password.
 
 ### Architecture
 ```
-┌─────────────┐      ┌──────────────────────┐      ┌─────────────────────┐
-│   Route     │ ───▶ │ PasswordResetService │ ───▶ │   EventDispatcher   │
-│ /forgot-pwd │      │                      │      │                     │
-└─────────────┘      │ 1. Validate email    │      └──────────┬──────────┘
-                     │ 2. Create token      │                 │
-                     │ 3. Emit event        │                 ▼
-                     └──────────────────────┘      ┌─────────────────────┐
-                                                   │ PasswordResetHandler│
-                                                   │                     │
-                                                   │ → Send reset email  │
-                                                   │ → Log activity      │
-                                                   └─────────────────────┘
+┌─────────────┐      ┌─────────────────────┐      ┌─────────────────────────┐      ┌──────────────────────┐
+│   Route     │ ───▶ │   EventDispatcher   │ ───▶ │ PasswordResetHandler    │ ───▶ │ PasswordResetService │
+│ /forgot-pwd │      │                     │      │                         │      │                      │
+│             │      │ emit:               │      │ 1. Validate request     │      │ 1. Generate token    │
+│ emit event  │      │ PasswordResetReq    │      │ 2. Call service         │      │ 2. Store token       │
+└─────────────┘      └─────────────────────┘      │ 3. Send reset email     │      │ 3. Return result     │
+                                                   │ 4. Log activity         │      └──────────┬───────────┘
+                                                   └─────────────────────────┘                 │
+                                                                                               ▼
+                                                                                          Database
 ```
 
 ### Events
 
-**File:** `src/services/events/security_events.py`
+**File:** `src/events/security_events.py`
+
+> **Note:** Events carry request data from routes to handlers. They are simple data containers.
+
 ```python
 from dataclasses import dataclass
-from datetime import datetime
-from src.services.events.base import Event
+from src.events.core.base import BaseEvent
 
 @dataclass
-class PasswordResetRequestedEvent(Event):
-    """Emitted when user requests password reset."""
-    user_id: str
-    email: str
-    token: str
-    expires_at: datetime
+class PasswordResetRequestEvent(BaseEvent):
+    """
+    Emitted by route when user requests password reset.
+
+    Route emits → Handler receives → Handler calls service → Service creates token
+    """
+    name: str = "security.password_reset.request"
+    email: str = ""
     request_ip: str = None
 
 @dataclass
-class PasswordResetCompletedEvent(Event):
-    """Emitted when password is successfully reset."""
-    user_id: str
-    email: str
-    reset_ip: str = None
+class PasswordResetExecuteEvent(BaseEvent):
+    """
+    Emitted by route when user submits new password with token.
 
-@dataclass
-class PasswordResetFailedEvent(Event):
-    """Emitted when password reset fails (invalid/expired token)."""
-    token: str
-    reason: str  # "expired", "invalid", "already_used"
-    attempt_ip: str = None
+    Route emits → Handler receives → Handler calls service → Service resets password
+    """
+    name: str = "security.password_reset.execute"
+    token: str = ""
+    new_password: str = ""
+    reset_ip: str = None
 ```
 
 ### TDD Tests First
@@ -137,46 +137,55 @@ class TestPasswordResetHandler:
 ### Service Implementation
 
 **File:** `src/services/password_reset_service.py`
+
+> **Note:** Service contains pure business logic. It does NOT emit events - that's the route's job.
+
 ```python
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 import secrets
 
-from src.services.events.dispatcher import EventDispatcher
-from src.services.events.security_events import (
-    PasswordResetRequestedEvent,
-    PasswordResetCompletedEvent,
-    PasswordResetFailedEvent,
-)
 from src.repositories.user_repository import UserRepository
 from src.repositories.password_reset_repository import PasswordResetRepository
 
 @dataclass
-class ResetResult:
+class ResetRequestResult:
     success: bool
+    user_id: Optional[str] = None
+    email: Optional[str] = None
+    token: Optional[str] = None
+    expires_at: Optional[datetime] = None
     error: Optional[str] = None
 
+@dataclass
+class ResetResult:
+    success: bool
+    user_id: Optional[str] = None
+    email: Optional[str] = None
+    error: Optional[str] = None
+    failure_reason: Optional[str] = None  # "invalid", "expired", "already_used"
+
 class PasswordResetService:
+    """Pure business logic for password reset. Does NOT emit events."""
+
     TOKEN_EXPIRY_HOURS = 1
 
     def __init__(
         self,
         user_repository: UserRepository,
         reset_repository: PasswordResetRepository,
-        event_dispatcher: EventDispatcher,
     ):
         self.user_repo = user_repository
         self.reset_repo = reset_repository
-        self.event_dispatcher = event_dispatcher
 
-    def request_reset(self, email: str, request_ip: str = None) -> ResetResult:
-        """Request password reset. Always returns success for security."""
+    def create_reset_token(self, email: str) -> ResetRequestResult:
+        """Create password reset token. Returns data for event emission."""
         user = self.user_repo.get_by_email(email)
 
         if not user:
-            # Don't reveal if email exists - return success anyway
-            return ResetResult(success=True)
+            # Don't reveal if email exists - return success but no data
+            return ResetRequestResult(success=True)
 
         # Invalidate any existing tokens
         self.reset_repo.invalidate_tokens_for_user(user.id)
@@ -192,57 +201,38 @@ class PasswordResetService:
             expires_at=expires_at
         )
 
-        # Emit event - handler will send email
-        self.event_dispatcher.dispatch(
-            PasswordResetRequestedEvent(
-                user_id=str(user.id),
-                email=user.email,
-                token=token,
-                expires_at=expires_at,
-                request_ip=request_ip
-            )
+        return ResetRequestResult(
+            success=True,
+            user_id=str(user.id),
+            email=user.email,
+            token=token,
+            expires_at=expires_at
         )
 
-        return ResetResult(success=True)
-
-    def reset_password(
-        self,
-        token: str,
-        new_password: str,
-        reset_ip: str = None
-    ) -> ResetResult:
-        """Reset password using token."""
+    def reset_password(self, token: str, new_password: str) -> ResetResult:
+        """Reset password using token. Returns data for event emission."""
         reset_token = self.reset_repo.get_by_token(token)
 
         if not reset_token:
-            self.event_dispatcher.dispatch(
-                PasswordResetFailedEvent(
-                    token=token[:8] + "...",  # Truncate for logging
-                    reason="invalid",
-                    attempt_ip=reset_ip
-                )
+            return ResetResult(
+                success=False,
+                error="Invalid token",
+                failure_reason="invalid"
             )
-            return ResetResult(success=False, error="Invalid token")
 
         if reset_token.expires_at < datetime.utcnow():
-            self.event_dispatcher.dispatch(
-                PasswordResetFailedEvent(
-                    token=token[:8] + "...",
-                    reason="expired",
-                    attempt_ip=reset_ip
-                )
+            return ResetResult(
+                success=False,
+                error="Token expired",
+                failure_reason="expired"
             )
-            return ResetResult(success=False, error="Token expired")
 
         if reset_token.used_at is not None:
-            self.event_dispatcher.dispatch(
-                PasswordResetFailedEvent(
-                    token=token[:8] + "...",
-                    reason="already_used",
-                    attempt_ip=reset_ip
-                )
+            return ResetResult(
+                success=False,
+                error="Token already used",
+                failure_reason="already_used"
             )
-            return ResetResult(success=False, error="Token already used")
 
         # Get user and update password
         user = self.user_repo.get_by_id(reset_token.user_id)
@@ -252,124 +242,191 @@ class PasswordResetService:
         # Mark token as used
         self.reset_repo.mark_used(reset_token.id)
 
-        # Emit success event
-        self.event_dispatcher.dispatch(
-            PasswordResetCompletedEvent(
-                user_id=str(user.id),
-                email=user.email,
-                reset_ip=reset_ip
-            )
+        return ResetResult(
+            success=True,
+            user_id=str(user.id),
+            email=user.email
         )
-
-        return ResetResult(success=True)
 ```
 
 ### Event Handler Implementation
 
-**File:** `src/services/events/handlers/password_reset_handler.py`
+**File:** `src/handlers/password_reset_handler.py`
+
+> **Note:** Handler receives events from route, calls services, and performs side effects.
+
 ```python
-from src.services.events.security_events import (
-    PasswordResetRequestedEvent,
-    PasswordResetCompletedEvent,
-    PasswordResetFailedEvent,
+from src.events.security_events import (
+    PasswordResetRequestEvent,
+    PasswordResetExecuteEvent,
 )
+from src.events.domain import EventResult
+from src.services.password_reset_service import PasswordResetService
 from src.services.email_service import EmailService
 from src.services.activity_logger import ActivityLogger
 
 class PasswordResetHandler:
+    """
+    Handles password reset events.
+
+    Flow:
+    1. Route emits event → 2. This handler receives it → 3. Calls service → 4. Side effects
+    """
+
     def __init__(
         self,
+        password_reset_service: PasswordResetService,
         email_service: EmailService,
         activity_logger: ActivityLogger,
         reset_url_base: str = "https://app.example.com/reset-password"
     ):
+        self.reset_service = password_reset_service
         self.email_service = email_service
         self.activity_logger = activity_logger
         self.reset_url_base = reset_url_base
 
-    def handle_reset_requested(self, event: PasswordResetRequestedEvent) -> None:
-        """Send password reset email."""
-        reset_url = f"{self.reset_url_base}?token={event.token}"
+    def handle_reset_request(self, event: PasswordResetRequestEvent) -> EventResult:
+        """
+        Handle password reset request.
 
-        self.email_service.send_template(
-            to=event.email,
-            template="password_reset",
-            context={
-                "reset_url": reset_url,
-                "expires_in": "1 hour",
-            }
-        )
+        1. Call service to create token
+        2. Send email if user exists
+        3. Log activity
+        """
+        # Call service
+        result = self.reset_service.create_reset_token(event.email)
 
-        self.activity_logger.log(
-            action="password_reset_requested",
-            user_id=event.user_id,
-            metadata={"ip": event.request_ip}
-        )
+        if result.success and result.token:
+            # User exists - send email
+            reset_url = f"{self.reset_url_base}?token={result.token}"
 
-    def handle_reset_completed(self, event: PasswordResetCompletedEvent) -> None:
-        """Log successful password reset and notify user."""
-        self.activity_logger.log(
-            action="password_reset_completed",
-            user_id=event.user_id,
-            metadata={"ip": event.reset_ip}
-        )
+            self.email_service.send_template(
+                to=result.email,
+                template="password_reset",
+                context={
+                    "reset_url": reset_url,
+                    "expires_in": "1 hour",
+                }
+            )
 
-        # Optional: Send confirmation email
-        self.email_service.send_template(
-            to=event.email,
-            template="password_changed",
-            context={}
-        )
+            self.activity_logger.log(
+                action="password_reset_requested",
+                user_id=result.user_id,
+                metadata={"ip": event.request_ip}
+            )
 
-    def handle_reset_failed(self, event: PasswordResetFailedEvent) -> None:
-        """Log failed reset attempt for security monitoring."""
-        self.activity_logger.log(
-            action="password_reset_failed",
-            metadata={
-                "reason": event.reason,
-                "ip": event.attempt_ip,
-                "token_prefix": event.token
-            }
-        )
+        # Always return success (don't reveal if email exists)
+        return EventResult.success_result({"message": "If email exists, reset link sent"})
+
+    def handle_reset_execute(self, event: PasswordResetExecuteEvent) -> EventResult:
+        """
+        Handle password reset execution.
+
+        1. Call service to reset password
+        2. Send confirmation or log failure
+        """
+        result = self.reset_service.reset_password(event.token, event.new_password)
+
+        if result.success:
+            # Send confirmation email
+            self.email_service.send_template(
+                to=result.email,
+                template="password_changed",
+                context={}
+            )
+
+            self.activity_logger.log(
+                action="password_reset_completed",
+                user_id=result.user_id,
+                metadata={"ip": event.reset_ip}
+            )
+
+            return EventResult.success_result({"message": "Password reset successful"})
+        else:
+            # Log failed attempt
+            self.activity_logger.log(
+                action="password_reset_failed",
+                metadata={
+                    "reason": result.failure_reason,
+                    "ip": event.reset_ip,
+                    "token_prefix": event.token[:8] + "..."
+                }
+            )
+
+            return EventResult.error_result(
+                error=result.error,
+                error_type=result.failure_reason
+            )
 ```
 
 ### Handler Registration
 
-**File:** `src/services/events/handlers/__init__.py` (addition)
+**File:** `src/handlers/__init__.py` (addition)
 ```python
-def register_security_handlers(dispatcher: EventDispatcher, container):
+from src.events.core.dispatcher import EnhancedEventDispatcher
+from src.events.security_events import (
+    PasswordResetRequestEvent,
+    PasswordResetExecuteEvent,
+)
+from src.handlers.password_reset_handler import PasswordResetHandler
+
+def register_security_handlers(dispatcher: EnhancedEventDispatcher, container):
     """Register security-related event handlers."""
     handler = PasswordResetHandler(
+        password_reset_service=container.password_reset_service(),
         email_service=container.email_service(),
         activity_logger=container.activity_logger(),
         reset_url_base=container.config.RESET_URL_BASE
     )
 
-    dispatcher.register(PasswordResetRequestedEvent, handler.handle_reset_requested)
-    dispatcher.register(PasswordResetCompletedEvent, handler.handle_reset_completed)
-    dispatcher.register(PasswordResetFailedEvent, handler.handle_reset_failed)
+    dispatcher.register(handler)  # Handler declares which events it handles
 ```
 
 ### Routes
 
 **File:** `src/routes/auth.py` (additions)
+
+> **Note:** Routes emit events and return dispatcher results. They do NOT call services directly.
+
 ```python
+from flask import current_app
+from src.events.security_events import (
+    PasswordResetRequestEvent,
+    PasswordResetExecuteEvent,
+)
+
 @auth_bp.route("/forgot-password", methods=["POST"])
 def forgot_password():
+    """
+    Request password reset.
+
+    Flow: Route → emit event → Dispatcher → Handler → Service → DB
+    """
     data = request.get_json()
     email = data.get("email")
 
     if not email:
         return jsonify({"error": "Email required"}), 400
 
-    service: PasswordResetService = current_app.container.password_reset_service()
-    service.request_reset(email, request_ip=request.remote_addr)
+    # Emit event - handler will do the work
+    dispatcher = current_app.container.event_dispatcher()
+    result = dispatcher.dispatch(
+        PasswordResetRequestEvent(
+            email=email,
+            request_ip=request.remote_addr
+        )
+    )
 
     # Always return success (don't reveal if email exists)
-    return jsonify({"message": "If email exists, reset link sent"})
+    return jsonify(result.data or {"message": "If email exists, reset link sent"})
 
 @auth_bp.route("/reset-password", methods=["POST"])
 def reset_password():
+    """
+    Execute password reset with token.
+
+    Flow: Route → emit event → Dispatcher → Handler → Service → DB
+    """
     data = request.get_json()
     token = data.get("token")
     new_password = data.get("new_password")
@@ -377,11 +434,18 @@ def reset_password():
     if not token or not new_password:
         return jsonify({"error": "Token and new password required"}), 400
 
-    service: PasswordResetService = current_app.container.password_reset_service()
-    result = service.reset_password(token, new_password, request.remote_addr)
+    # Emit event - handler will do the work
+    dispatcher = current_app.container.event_dispatcher()
+    result = dispatcher.dispatch(
+        PasswordResetExecuteEvent(
+            token=token,
+            new_password=new_password,
+            reset_ip=request.remote_addr
+        )
+    )
 
     if result.success:
-        return jsonify({"message": "Password reset successful"})
+        return jsonify(result.data or {"message": "Password reset successful"})
     return jsonify({"error": result.error}), 400
 ```
 
