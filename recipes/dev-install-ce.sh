@@ -196,17 +196,35 @@ if wait_for_service "Backend API" "http://localhost:5000/health" 60; then
 else
     echo "ERROR: Backend API failed to start"
     echo "Checking backend logs..."
-    docker-compose logs python
+    docker-compose logs api
     exit 1
 fi
 
 # Check database
 echo "Checking database connection..."
-if docker-compose exec -T python python -c "from sqlalchemy import create_engine; import os; e=create_engine(os.getenv('DATABASE_URL', 'postgresql://vbwd:vbwd@postgres:5432/vbwd')); c=e.connect(); print('Database: OK'); c.close()" 2>/dev/null; then
+if docker-compose exec -T api python -c "from sqlalchemy import create_engine; import os; e=create_engine(os.getenv('DATABASE_URL', 'postgresql://vbwd:vbwd@postgres:5432/vbwd')); c=e.connect(); print('Database: OK'); c.close()" 2>/dev/null; then
     echo "Database is connected and ready"
 else
     echo "WARNING: Database connection check failed"
     docker-compose logs postgres
+fi
+
+# Run database migrations
+echo ""
+echo "=========================================="
+echo "Step 3.5: Running database migrations"
+echo "=========================================="
+
+if [ -f "$WORKSPACE_DIR/recipes/run_migrations.sh" ]; then
+    echo "Running database migrations..."
+    bash "$WORKSPACE_DIR/recipes/run_migrations.sh" upgrade
+    if [ $? -eq 0 ]; then
+        echo "Database migrations completed!"
+    else
+        echo "WARNING: Database migrations may have failed - check logs"
+    fi
+else
+    echo "WARNING: run_migrations.sh not found, skipping migrations"
 fi
 
 # Run backend tests
@@ -260,7 +278,7 @@ echo "  - Frontend:    http://localhost:8080"
 echo "  - Database:    postgresql://vbwd:vbwd@localhost:5432/vbwd"
 echo ""
 echo "Useful commands:"
-echo "  - Backend logs:  cd $BACKEND_DIR && docker-compose logs -f python"
+echo "  - Backend logs:  cd $BACKEND_DIR && docker-compose logs -f api"
 echo "  - Frontend logs: cd $FRONTEND_DIR && docker-compose logs -f"
 echo "  - Run tests:     cd $BACKEND_DIR && make test"
 echo "  - Stop all:      cd $BACKEND_DIR && docker-compose down"
