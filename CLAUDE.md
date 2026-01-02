@@ -4,266 +4,174 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**vbwd-sdk** - Dual-purpose platform with two distinct implementations:
+**vbwd-sdk** - SaaS marketplace platform enabling vendors to connect their products with complete CRM, billing, and subscription infrastructure.
 
-1. **Current Implementation**: Medical diagnostic submission platform (LoopAI integration)
-2. **Aspirational Architecture**: SaaS marketplace with subscription billing (documented in `docs/architecture_core_server_ce/`)
-
-**Note**: The README.md describes the aspirational SaaS marketplace vision, while the actual codebase implements the medical diagnostic platform. This CLAUDE.md documents what's actually implemented.
+- **CE (Community Edition)**: Self-hosted subscription platform
+- **ME (Marketplace Edition)**: Cloud SaaS marketplace (planned)
 
 License: CC0 1.0 Universal (Public Domain)
 
-## Current Implementation Architecture
+## Monorepo Structure
 
-### Container Stack
-- **frontend**: Vue.js 3 applications (nginx, port 8080)
-  - User app: `frontend/user/vue/`
-  - Admin app: `frontend/admin/vue/`
-- **python**: Python 3.11 / Flask API (port 5000)
-- **postgres**: PostgreSQL 16 database (port 5432)
-- **python-test**: Test runner (profile: test)
-
-### Key Components
-- **Fire-and-forget submission**: Returns 202, processes in background thread via ThreadPoolExecutor
-- **LoopAI integration**: External diagnostic API client (`loopai_client.py`)
-- **WebSocket notifications**: Real-time status updates via flask-socketio
-- **Email service**: Results delivery via SMTP
+```
+vbwd-sdk/
+├── vbwd-backend/      # Python/Flask API
+├── vbwd-frontend/     # Vue.js applications
+│   ├── user/          # User-facing app
+│   ├── admin/         # Admin backoffice
+│   └── core/          # Shared component library
+└── docs/              # Architecture documentation
+```
 
 ## Development Commands
 
-### Using Make (recommended)
-```bash
-# Start all services
-make up
-
-# Start with rebuild
-make up-build
-
-# Stop services
-make down
-
-# Build containers
-make build
-
-# Run all tests
-make test
-
-# Run Python tests only
-make test-python
-
-# Run unit tests only
-make test-unit
-
-# Run integration tests only
-make test-integration
-
-# Run with coverage report
-make test-coverage
-
-# View logs (all services)
-make logs
-
-# View specific service logs
-make logs-python
-make logs-frontend
-
-# Shell access
-make shell-python
-make shell-frontend
-
-# Clean up (removes volumes and logs)
-make clean
-```
-
-**Note**: The Makefile currently references `mysql` in some targets (logs-mysql, shell-mysql, health check, clean) but the actual database is PostgreSQL. Use `postgres` service name with docker-compose directly:
+### Backend (`vbwd-backend/`)
 
 ```bash
-# PostgreSQL shell access
-docker-compose exec postgres psql -U vbwd -d vbwd
-
-# View PostgreSQL logs
-docker-compose logs -f postgres
-
-# Health check (backend -> database)
-docker-compose exec python python -c "from sqlalchemy import create_engine; e=create_engine('postgresql://vbwd:vbwd@postgres:5432/vbwd'); c=e.connect(); print('Database: OK'); c.close()"
+make up                  # Start services (API, PostgreSQL, Redis)
+make up-build            # Start with rebuild
+make down                # Stop services
+make test                # Run unit tests (SQLite in-memory)
+make test-unit           # Unit tests only
+make test-integration    # Integration tests (real PostgreSQL)
+make test-coverage       # Tests with coverage report
+make lint                # Static analysis (black, flake8, mypy)
+make pre-commit          # Full check (lint + unit + integration)
+make pre-commit-quick    # Quick check (lint + unit)
+make shell               # Access API container bash
+make logs                # View service logs
 ```
 
-### Using docker-compose directly
+Running a specific test:
 ```bash
-# Start services
-docker-compose up -d
-
-# Run tests
-docker-compose run --rm python-test
-
-# Run specific pytest command
-docker-compose run --rm python-test pytest tests/unit/test_validator_service.py -v
-
-# Run single test
-docker-compose run --rm python-test pytest tests/unit/test_validator_service.py::TestValidatorService::test_validate_email -v
-
-# Shell access to services
-docker-compose exec python bash
-docker-compose exec postgres psql -U vbwd -d vbwd
+docker-compose run --rm test pytest tests/unit/services/test_auth_service.py -v
+docker-compose run --rm test pytest tests/unit/services/test_auth_service.py::TestAuthService::test_login -v
 ```
 
-## Project Structure
+### Frontend (`vbwd-frontend/`)
 
-```
-python/api/
-  src/
-    routes/          # API endpoints
-      user.py        # /submit, /status/<id>
-      admin.py       # Admin operations
-      websocket.py   # WebSocket events
-      health.py      # Health check
-    models/
-      submission.py  # Submission data model
-      admin_user.py  # Admin user model
-    services/
-      submission_service.py   # Business logic
-      validator_service.py    # Input validation
-      loopai_client.py        # External API client
-      email_service.py        # Email delivery
-      auth_service.py         # Authentication
-  tests/
-    unit/            # Unit tests
-    integration/     # Integration tests
-    fixtures/        # Test fixtures
-    conftest.py      # Pytest configuration
-  requirements.txt
-  gunicorn.conf.py
-
-frontend/
-  user/vue/          # User-facing Vue.js app
-  admin/vue/         # Admin backoffice Vue.js app
-
-container/           # Dockerfiles per service
-  python/
-    Dockerfile       # Production Python image
-    Dockerfile.test  # Test runner image
-  frontend/
-    Dockerfile
-    nginx.conf
-  mysql/             # Note: Contains MySQL but postgres is used
+```bash
+make dev                 # Start development mode (hot reload)
+make up                  # Start production containers
+make test                # Run unit tests (user + admin)
+make lint                # Run ESLint
+make test-e2e            # Run Playwright E2E tests
+make test-e2e-ui         # E2E with Playwright UI
+make test-e2e-headed     # E2E in visible browser
+make test-e2e-file FILE=auth.spec.ts  # Specific E2E test
+make playwright-install  # Install Playwright browsers
 ```
 
-## API Workflow
+### Root Level
 
-### Submission Flow
-1. User submits form to `/submit` (POST)
-2. Validates synchronously (email, consent, images)
-3. Creates `Submission` record in DB (status: pending)
-4. Returns 202 immediately with submission_id
-5. Background thread (ThreadPoolExecutor):
-   - Calls LoopAI API with images
-   - Updates submission status
-   - Sends email with results
-   - Emits WebSocket event
-
-### Admin Flow
-- Admin can view all submissions
-- Admin can see full details including results
-- Authentication via auth_service
-
-## Database Schema
-
-### Submission Model
-```python
-class Submission:
-    id (Integer, PK)
-    email (String(255), indexed)
-    status (Enum: pending, processing, completed, failed)
-    images_data (JSON)
-    comments (Text)
-    consent_given (Boolean)
-    consent_timestamp (DateTime)
-    result (JSON)
-    error (Text)
-    loopai_execution_id (String(255))
-    created_at (DateTime, indexed)
-    updated_at (DateTime)
+```bash
+make up                  # Start all containers (backend + frontend)
+make down                # Stop all services
+make ps                  # Show status of all containers
 ```
+
+## Tech Stack
+
+**Backend**: Python 3.11, Flask 3.0, PostgreSQL 16, Redis 7, SQLAlchemy 2.0
+**Frontend**: Vue.js 3, Vite, Pinia, Vue Router, Playwright (E2E)
+**Infrastructure**: Docker, Alembic migrations, Gunicorn
+
+## Backend Architecture
+
+### Layered Architecture
+Routes → Services → Repositories → Models
+
+- **Routes** (`src/routes/`): API endpoints, input validation
+- **Services** (`src/services/`): Business logic with dependency injection
+- **Repositories** (`src/repositories/`): Data access layer
+- **Models** (`src/models/`): SQLAlchemy ORM entities
+
+### Dependency Injection
+All dependencies wired through `src/container.py` using `dependency-injector`. Services and repositories are injected per-request.
+
+### Event-Driven System
+Domain events (`src/events/`) dispatched to handlers (`src/handlers/`):
+- `UserCreatedEvent`, `SubscriptionCreatedEvent`, `PaymentProcessedEvent`
+- Handlers perform async operations like sending emails, webhooks
+
+### SDK Adapter Pattern
+Pluggable payment providers via `src/sdk/`:
+- `SDKInterface` - abstract payment interface
+- `SDKRegistry` - register/retrieve adapters
+- `MockAdapter` - testing adapter
+
+### API Routes
+All routes under `/api/v1/`:
+- `/auth/` - register, login, logout, refresh
+- `/user/` - profile, subscriptions
+- `/tarif-plans/` - plan listing
+- `/invoices/` - invoice management
+- `/admin/` - admin operations
 
 ## Testing Strategy
 
-All tests run in Docker containers via `python-test` service (profile: test):
-
+### Unit Tests (fast, SQLite in-memory)
 ```bash
-# Run all tests with coverage
-make test-coverage
-
-# Run specific test file
-docker-compose run --rm python-test pytest tests/unit/test_validator_service.py -v
-
-# Run specific test
-docker-compose run --rm python-test pytest tests/unit/test_validator_service.py::TestValidatorService::test_validate_email -v
+docker-compose run --rm test pytest tests/unit/ -v
 ```
 
-Tests follow TDD principles with separation of unit and integration tests.
-
-## Environment Configuration
-
-Copy `.env.example` to `.env` and configure:
-
-### Database
-- `POSTGRES_PASSWORD`: PostgreSQL password (default: vbwd)
-- `POSTGRES_DB`: Database name (default: vbwd)
-- `POSTGRES_USER`: Database user (default: vbwd)
-
-### Flask
-- `FLASK_ENV`: Environment (development/production)
-- `FLASK_SECRET_KEY`: Session encryption key (change in production)
-
-### LoopAI Integration
-- `LOOPAI_API_URL`: External diagnostic API endpoint (default: http://loopai-web:5000)
-- `LOOPAI_API_KEY`: API authentication key
-- `LOOPAI_AGENT_ID`: Agent identifier (default: 1)
-
-### Email
-- `SMTP_HOST`: SMTP server hostname
-- `SMTP_PORT`: SMTP port (default: 587)
-- `SMTP_USER`: SMTP username
-- `SMTP_PASSWORD`: SMTP password
-
-## Key Design Patterns
-
-- **Fire-and-forget**: Immediate 202 response with background processing via ThreadPoolExecutor
-- **Dependency Injection**: Services injected into routes
-- **Service Layer**: Business logic separated from routes
-- **Background Execution**: ThreadPoolExecutor for non-blocking operations
-- **WebSocket**: Real-time updates for submission status via flask-socketio
-
-## Common Issues
-
-### Database Mismatch
-The Makefile contains outdated MySQL references but the actual database is PostgreSQL:
-- Use `postgres` instead of `mysql` in docker-compose commands
-- Database URL format: `postgresql://vbwd:vbwd@postgres:5432/vbwd`
-- Shell access: `docker-compose exec postgres psql -U vbwd -d vbwd`
-
-### Health Check
-If services can't communicate:
+### Integration Tests (real PostgreSQL, HTTP API)
 ```bash
-# Frontend → Backend connectivity
-docker-compose exec frontend curl -s http://python:5000/health
-
-# Backend → Database connectivity
-docker-compose exec python python -c "from sqlalchemy import create_engine; e=create_engine('postgresql://vbwd:vbwd@postgres:5432/vbwd'); c=e.connect(); print('Database: OK'); c.close()"
+docker-compose --profile test-integration run --rm test-integration pytest tests/integration/ -v
 ```
 
-### Database Connection
-If PostgreSQL connection fails, ensure:
-1. PostgreSQL service is healthy: `docker-compose ps`
-2. Credentials in `.env` match `docker-compose.yaml`
-3. Wait for PostgreSQL healthcheck to pass (uses `pg_isready`)
-4. Database URL uses correct driver: `postgresql://` (not `mysql://`)
+### E2E Tests (Playwright)
+```bash
+cd vbwd-frontend && make test-e2e
+```
 
-## Documentation Structure
+Test credentials (seeded):
+- User: `test@example.com` / `TestPass123@`
+- Admin: `admin@example.com` / `AdminPass123@`
 
-- **Current Implementation**: This CLAUDE.md
-- **Aspirational SaaS Platform**: `docs/architecture_core_server_ce/README.md`
-- **Development logs**: `docs/devlog/YYYYMMDD/`
-- **README.md**: Describes aspirational vision (not current state)
+## Database
 
-The architecture docs in `docs/architecture_core_server_ce/` contain detailed planning for a future SaaS marketplace with subscription billing, payment processing, booking systems, and multi-tenant architecture. This represents the planned evolution of the platform but is not yet implemented.
+PostgreSQL 16 with Alembic migrations.
+
+```bash
+# Run migrations
+docker-compose exec api flask db upgrade
+
+# Create migration
+docker-compose exec api flask db migrate -m "description"
+
+# Access database
+docker-compose exec postgres psql -U vbwd -d vbwd
+```
+
+## Pre-Commit Quality Checks
+
+The backend includes `bin/pre-commit-check.sh`:
+- Phase A: Black formatting, Flake8 style, MyPy types
+- Phase B: Unit tests
+- Phase C: Integration tests
+
+```bash
+./bin/pre-commit-check.sh          # Full check
+./bin/pre-commit-check.sh --quick  # Skip integration
+./bin/pre-commit-check.sh --lint   # Only static analysis
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `vbwd-backend/src/app.py` | Flask app factory |
+| `vbwd-backend/src/container.py` | DI container |
+| `vbwd-backend/src/config.py` | Configuration |
+| `vbwd-backend/docker-compose.yaml` | Backend services |
+| `vbwd-frontend/docker-compose.yaml` | Frontend services |
+
+## Environment Variables
+
+Copy `.env.example` to `.env` in `vbwd-backend/`:
+- `DATABASE_URL` - PostgreSQL connection
+- `REDIS_URL` - Redis connection
+- `JWT_SECRET_KEY` - JWT signing key
+- `SMTP_*` - Email configuration
+- `TEST_DATA_SEED` / `TEST_DATA_CLEANUP` - Test data management
