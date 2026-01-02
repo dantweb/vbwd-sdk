@@ -1,8 +1,82 @@
-# VBWD Core View Compoentent Architecture
+# VBWD Core View Component Architecture
 
 **Project:** VBWD-SDK - Shared Core Module for User & Admin Applications
-**Status:** Initial Development
+**Status:** Partially Implemented
+**Last Updated:** 2026-01-02
 **License:** CC0 1.0 Universal (Public Domain)
+
+---
+
+## Implementation Status (2026-01-02)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Package Structure** | ✅ Implemented | `@vbwd/view-component` in `frontend/core/` |
+| **Plugin System** | ✅ Implemented | PluginRegistry, IPlatformSDK, lifecycle |
+| **API Client** | ✅ Implemented | ApiClient class in core |
+| **Event Bus** | ✅ Implemented | EventBus with typed events |
+| **Auth Store** | ✅ Implemented | Shared auth store |
+| **Subscription Store** | ✅ Implemented | Feature access control |
+| **Route Guards** | ✅ Implemented | AuthGuard, RoleGuard |
+| **Composables** | ✅ Implemented | useFeatureAccess |
+| **API Types** | ✅ Implemented | Shared types for API responses |
+| **UI Components** | ⚠️ Partial | Forms, layout, access components |
+
+### Plugin System (View-Core)
+
+Located in `frontend/core/src/plugins/`:
+
+| File | Purpose |
+|------|---------|
+| `types.ts` | `IPlugin`, `IPlatformSDK`, `IPluginRegistry` interfaces |
+| `PluginRegistry.ts` | Plugin registration, lifecycle, dependency resolution |
+| `PlatformSDK.ts` | SDK instance for plugins (routes, components, stores) |
+| `utils/semver.ts` | Semantic versioning utilities |
+
+**Plugin Interface:**
+```typescript
+interface IPlugin {
+  name: string;
+  version: string;
+  dependencies?: string[] | Record<string, string>;
+  install?(sdk: IPlatformSDK): void | Promise<void>;
+  activate?(): void | Promise<void>;
+  deactivate?(): void | Promise<void>;
+  uninstall?(): void | Promise<void>;
+}
+```
+
+**Plugin Lifecycle:**
+```
+REGISTERED → INSTALLED → ACTIVE ⇄ INACTIVE
+```
+
+**Usage:**
+```typescript
+import { PluginRegistry, PlatformSDK } from '@vbwd/view-component';
+
+const registry = new PluginRegistry();
+const sdk = new PlatformSDK(app, router);
+
+registry.register(myPlugin);
+await registry.installAll(sdk);
+await registry.activate('my-plugin');
+```
+
+### Current Reality vs. Plan
+
+The `frontend/core/` package has **more** implementation than admin uses:
+- **Plugin system exists** but admin app uses flat views/ structure
+- **ApiClient exists** but admin app uses own api.ts
+- **Auth store exists** but admin has own auth.ts
+- **Event bus exists** but not used in admin
+
+### Path Forward
+
+1. Migrate admin app to use core's ApiClient
+2. Migrate admin stores to use core's auth store
+3. Convert admin views to plugin format (optional)
+4. Add shared UI component library
 
 ---
 

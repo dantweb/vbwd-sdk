@@ -1,0 +1,209 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'vbwd-backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'vbwd-backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+defaults:
+  run:
+    working-directory: vbwd-backend
+
+jobs:
+  # ============================================
+  # Part A: Static Code Analysis
+  # ============================================
+  lint:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install black flake8 mypy
+
+      - name: Run Black (code formatter check)
+        run: black --check --diff src/ tests/
+
+      - name: Run Flake8 (code style)
+        run: flake8 src/ tests/ --max-line-length=120 --extend-ignore=E203,W503
+
+      - name: Run Mypy (type checker)
+        run: mypy src/ --ignore-missing-imports --no-error-summary
+
+  # ============================================
+  # Part B: Unit Tests
+  # ============================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit tests
+        env:
+          FLASK_ENV: testing
+          DATABASE_URL: sqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/1
+        run: pytest tests/unit/ -v --tb=short
+
+  # ============================================
+  # Part C: Integration Tests
+  # ============================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vbwd
+          POSTGRES_PASSWORD: vbwd
+          POSTGRES_DB: vbwd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Start API server
+        env:
+          FLASK_ENV: testing
+          DATABASE_URL: postgresql://vbwd:vbwd@localhost:5432/vbwd
+          REDIS_URL: redis://localhost:6379/1
+          FLASK_SECRET_KEY: test-secret-key
+          JWT_SECRET_KEY: test-jwt-secret
+        run: |
+          # Initialize database
+          flask db upgrade || true
+          # Seed test data
+          TEST_DATA_SEED=true flask seed-test-data
+          # Start server in background
+          gunicorn --bind 0.0.0.0:5000 "src.app:create_app()" &
+          # Wait for server to be ready
+          sleep 5
+          curl --retry 5 --retry-delay 2 --retry-connrefused http://localhost:5000/api/v1/health
+
+      - name: Run integration tests
+        env:
+          API_BASE_URL: http://localhost:5000/api/v1
+          TEST_USER_EMAIL: test@example.com
+          TEST_USER_PASSWORD: TestPass123@
+          TEST_ADMIN_EMAIL: admin@example.com
+          TEST_ADMIN_PASSWORD: AdminPass123@
+        run: pytest tests/integration/test_api_endpoints.py -v --tb=short
+
+  # ============================================
+  # Coverage Report (optional, on main only)
+  # ============================================
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.ref == 'refs/heads/main'
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        env:
+          FLASK_ENV: testing
+          DATABASE_URL: sqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/1
+        run: pytest tests/unit/ --cov=src --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./vbwd-backend/coverage.xml
+          flags: backend
+          fail_ci_if_error: false

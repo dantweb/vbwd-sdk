@@ -1,8 +1,58 @@
 # VBWD-SDK Architecture
 
 **Project:** VBWD-SDK - Digital Subscriptions & SaaS Sales Platform
-**Status:** Initial Development
+**Status:** Active Development
+**Last Updated:** 2026-01-02
 **License:** CC0 1.0 Universal (Public Domain)
+
+---
+
+## Implementation Status (2026-01-02)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **User Management** | ✅ Implemented | Registration, login, profile, JWT auth |
+| **Tariff Plans** | ✅ Implemented | CRUD, features, limits, billing periods |
+| **Subscriptions** | ✅ Implemented | Create, cancel, extend, upgrade/downgrade |
+| **Invoices** | ✅ Implemented | Generation, status tracking, PDF ready |
+| **Admin API** | ✅ Implemented | Full CRUD for all entities |
+| **Analytics API** | ✅ Implemented | Overview, revenue, user metrics |
+| **Webhook System** | ✅ Implemented | Event dispatch, retry logic |
+| **Event System** | ✅ Implemented | Domain events with handlers |
+| **SDK Adapter Pattern** | ✅ Implemented | MockAdapter, interface ready |
+| **Plugin System** | ✅ Implemented | BasePlugin, PluginManager, lifecycle |
+| **Payment Integration** | ⏳ Planned | Stripe/PayPal adapters |
+| **Multi-tenancy** | ⏳ Planned | Future ME edition |
+
+### Plugin System (Backend)
+
+Located in `src/plugins/`:
+
+| File | Purpose |
+|------|---------|
+| `base.py` | `BasePlugin` ABC, `PluginMetadata`, `PluginStatus` |
+| `manager.py` | `PluginManager` - registration, lifecycle, dependencies |
+| `payment_provider.py` | `PaymentProviderPlugin` interface |
+| `providers/mock_payment_plugin.py` | Mock payment provider for testing |
+
+**Plugin Lifecycle:**
+```
+DISCOVERED → REGISTERED → INITIALIZED → ENABLED ⇄ DISABLED
+```
+
+**Usage:**
+```python
+from src.plugins.manager import PluginManager
+from src.plugins.providers.mock_payment_plugin import MockPaymentPlugin
+
+manager = PluginManager(event_dispatcher)
+manager.register_plugin(MockPaymentPlugin())
+manager.initialize_plugin("mock_payment", config={})
+manager.enable_plugin("mock_payment")
+```
+
+**Backend Tests:** 292 unit + integration tests
+**Frontend Tests:** 71 unit tests, 108 E2E tests (admin)
 
 ---
 

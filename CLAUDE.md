@@ -4,23 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**vbwd-sdk** - SaaS marketplace platform enabling vendors to connect their products with complete CRM, billing, and subscription infrastructure.
+**vbwd-sdk** - SaaS marketplace platform with subscription billing, user management, and admin dashboard.
 
-- **CE (Community Edition)**: Self-hosted subscription platform
+- **CE (Community Edition)**: Self-hosted subscription platform (current focus)
 - **ME (Marketplace Edition)**: Cloud SaaS marketplace (planned)
 
-License: CC0 1.0 Universal (Public Domain)
+**Last Updated:** 2026-01-02
+**License:** CC0 1.0 Universal (Public Domain)
 
 ## Monorepo Structure
 
 ```
 vbwd-sdk/
-├── vbwd-backend/      # Python/Flask API
-├── vbwd-frontend/     # Vue.js applications
-│   ├── user/          # User-facing app
-│   ├── admin/         # Admin backoffice
-│   └── core/          # Shared component library
-└── docs/              # Architecture documentation
+├── vbwd-backend/           # Python/Flask API (292 tests)
+├── vbwd-frontend/          # Vue.js applications
+│   ├── user/vue/           # User-facing app
+│   ├── admin/vue/          # Admin backoffice (71 unit, 108 E2E tests)
+│   └── core/               # Shared component library
+└── docs/                   # Architecture documentation
+    ├── architecture_core_server_ce/      # Backend architecture
+    ├── architecture_core_view_admin/     # Admin frontend architecture
+    ├── architecture_core_view_component/ # Shared component architecture
+    └── devlog/                           # Development logs
 ```
 
 ## Development Commands
@@ -31,7 +36,7 @@ vbwd-sdk/
 make up                  # Start services (API, PostgreSQL, Redis)
 make up-build            # Start with rebuild
 make down                # Stop services
-make test                # Run unit tests (SQLite in-memory)
+make test                # Run unit tests
 make test-unit           # Unit tests only
 make test-integration    # Integration tests (real PostgreSQL)
 make test-coverage       # Tests with coverage report
@@ -42,39 +47,42 @@ make shell               # Access API container bash
 make logs                # View service logs
 ```
 
-Running a specific test:
-```bash
-docker-compose run --rm test pytest tests/unit/services/test_auth_service.py -v
-docker-compose run --rm test pytest tests/unit/services/test_auth_service.py::TestAuthService::test_login -v
-```
-
 ### Frontend (`vbwd-frontend/`)
 
 ```bash
-make dev                 # Start development mode (hot reload)
 make up                  # Start production containers
+make dev                 # Start development mode
 make test                # Run unit tests (user + admin)
-make lint                # Run ESLint
-make test-e2e            # Run Playwright E2E tests
-make test-e2e-ui         # E2E with Playwright UI
-make test-e2e-headed     # E2E in visible browser
-make test-e2e-file FILE=auth.spec.ts  # Specific E2E test
-make playwright-install  # Install Playwright browsers
+make test-admin          # Admin unit tests only
+make test-user           # User unit tests only
+make lint                # Run ESLint for all apps
 ```
 
-### Root Level
+### Admin Frontend (`vbwd-frontend/admin/vue/`)
 
 ```bash
-make up                  # Start all containers (backend + frontend)
-make down                # Stop all services
-make ps                  # Show status of all containers
+npm run dev              # Start dev server (port 5174)
+npm run build            # Production build
+npm run test             # Unit tests (Vitest)
+npm run test:e2e         # E2E tests (Playwright)
+npm run test:e2e:ui      # E2E with Playwright UI
+npm run lint             # ESLint
+```
+
+### Pre-commit Checks (`vbwd-frontend/`)
+
+```bash
+./bin/pre-commit-check.sh --admin --unit     # Admin unit tests
+./bin/pre-commit-check.sh --admin --e2e      # Admin E2E tests
+./bin/pre-commit-check.sh --admin --style    # Lint + TypeScript
 ```
 
 ## Tech Stack
 
 **Backend**: Python 3.11, Flask 3.0, PostgreSQL 16, Redis 7, SQLAlchemy 2.0
-**Frontend**: Vue.js 3, Vite, Pinia, Vue Router, Playwright (E2E)
-**Infrastructure**: Docker, Alembic migrations, Gunicorn
+**Frontend**: Vue.js 3, Vite, Pinia, Vue Router, TypeScript
+**Testing**: Pytest (backend), Vitest (unit), Playwright (E2E)
+**Infrastructure**: Docker, Alembic migrations, Gunicorn, Nginx
 
 ## Backend Architecture
 
@@ -86,19 +94,32 @@ Routes → Services → Repositories → Models
 - **Repositories** (`src/repositories/`): Data access layer
 - **Models** (`src/models/`): SQLAlchemy ORM entities
 
-### Dependency Injection
-All dependencies wired through `src/container.py` using `dependency-injector`. Services and repositories are injected per-request.
+### Key Patterns
+- Dependency injection via `dependency-injector`
+- Event-driven architecture for async operations
+- SDK adapter pattern for payment providers
+- Plugin system for extensibility
 
-### Event-Driven System
-Domain events (`src/events/`) dispatched to handlers (`src/handlers/`):
-- `UserCreatedEvent`, `SubscriptionCreatedEvent`, `PaymentProcessedEvent`
-- Handlers perform async operations like sending emails, webhooks
+### Plugin System (Backend)
 
-### SDK Adapter Pattern
-Pluggable payment providers via `src/sdk/`:
-- `SDKInterface` - abstract payment interface
-- `SDKRegistry` - register/retrieve adapters
-- `MockAdapter` - testing adapter
+Located in `vbwd-backend/src/plugins/`:
+```python
+from src.plugins.manager import PluginManager
+from src.plugins.base import BasePlugin, PluginMetadata
+
+class MyPlugin(BasePlugin):
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(name="my-plugin", version="1.0.0", ...)
+
+    def on_enable(self): ...
+    def on_disable(self): ...
+
+manager = PluginManager(event_dispatcher)
+manager.register_plugin(MyPlugin())
+manager.initialize_plugin("my-plugin")
+manager.enable_plugin("my-plugin")
+```
 
 ### API Routes
 All routes under `/api/v1/`:
@@ -106,28 +127,83 @@ All routes under `/api/v1/`:
 - `/user/` - profile, subscriptions
 - `/tarif-plans/` - plan listing
 - `/invoices/` - invoice management
-- `/admin/` - admin operations
+- `/admin/` - admin operations (requires admin role)
 
-## Testing Strategy
+## Frontend Architecture
 
-### Unit Tests (fast, SQLite in-memory)
+### Plugin System (View-Core)
+
+Located in `vbwd-frontend/core/src/plugins/`:
+```typescript
+import { PluginRegistry, PlatformSDK, IPlugin } from '@vbwd/view-component';
+
+const myPlugin: IPlugin = {
+  name: 'my-plugin',
+  version: '1.0.0',
+  install(sdk) {
+    sdk.addRoute({ path: '/my-page', name: 'MyPage', component: () => import('./MyPage.vue') });
+    sdk.createStore('myStore', { state: () => ({ count: 0 }) });
+  },
+  activate() { console.log('Plugin activated'); },
+  deactivate() { console.log('Plugin deactivated'); }
+};
+
+const registry = new PluginRegistry();
+registry.register(myPlugin);
+await registry.installAll(sdk);
+await registry.activate('my-plugin');
+```
+
+**Note:** Admin app currently uses flat structure instead of plugins.
+
+### Admin App Structure
+```
+admin/vue/
+├── src/
+│   ├── api/              # API client
+│   ├── stores/           # Pinia stores
+│   │   ├── auth.ts       # Authentication
+│   │   ├── users.ts      # User management
+│   │   ├── planAdmin.ts  # Plan management
+│   │   ├── subscriptions.ts
+│   │   ├── invoices.ts
+│   │   ├── webhooks.ts
+│   │   └── analytics.ts
+│   ├── views/            # Page components
+│   │   ├── Dashboard.vue
+│   │   ├── Users.vue, UserDetails.vue
+│   │   ├── Plans.vue, PlanForm.vue
+│   │   ├── Subscriptions.vue, SubscriptionDetails.vue
+│   │   ├── Invoices.vue, InvoiceDetails.vue
+│   │   ├── Webhooks.vue, WebhookDetails.vue
+│   │   ├── Analytics.vue
+│   │   └── Settings.vue
+│   └── router/           # Vue Router config
+└── tests/
+    ├── unit/             # Vitest unit tests
+    └── e2e/              # Playwright E2E tests
+```
+
+## Testing
+
+### Backend
 ```bash
 docker-compose run --rm test pytest tests/unit/ -v
+docker-compose run --rm test pytest tests/unit/services/test_auth_service.py -v
 ```
 
-### Integration Tests (real PostgreSQL, HTTP API)
+### Frontend E2E (Playwright)
 ```bash
-docker-compose --profile test-integration run --rm test-integration pytest tests/integration/ -v
+cd vbwd-frontend/admin/vue
+npx playwright test                    # Run all tests
+npx playwright test admin-users        # Run specific spec
+npx playwright test --ui               # Interactive UI mode
+E2E_BASE_URL=http://localhost:8081 npx playwright test  # Against docker
 ```
 
-### E2E Tests (Playwright)
-```bash
-cd vbwd-frontend && make test-e2e
-```
-
-Test credentials (seeded):
-- User: `test@example.com` / `TestPass123@`
+Test credentials:
 - Admin: `admin@example.com` / `AdminPass123@`
+- User: `test@example.com` / `TestPass123@`
 
 ## Database
 
@@ -144,34 +220,29 @@ docker-compose exec api flask db migrate -m "description"
 docker-compose exec postgres psql -U vbwd -d vbwd
 ```
 
-## Pre-Commit Quality Checks
+## Key Configuration
 
-The backend includes `bin/pre-commit-check.sh`:
-- Phase A: Black formatting, Flake8 style, MyPy types
-- Phase B: Unit tests
-- Phase C: Integration tests
-
-```bash
-./bin/pre-commit-check.sh          # Full check
-./bin/pre-commit-check.sh --quick  # Skip integration
-./bin/pre-commit-check.sh --lint   # Only static analysis
-```
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `vbwd-backend/src/app.py` | Flask app factory |
-| `vbwd-backend/src/container.py` | DI container |
-| `vbwd-backend/src/config.py` | Configuration |
-| `vbwd-backend/docker-compose.yaml` | Backend services |
-| `vbwd-frontend/docker-compose.yaml` | Frontend services |
-
-## Environment Variables
-
-Copy `.env.example` to `.env` in `vbwd-backend/`:
+### Environment Variables (`.env`)
 - `DATABASE_URL` - PostgreSQL connection
 - `REDIS_URL` - Redis connection
 - `JWT_SECRET_KEY` - JWT signing key
-- `SMTP_*` - Email configuration
-- `TEST_DATA_SEED` / `TEST_DATA_CLEANUP` - Test data management
+- `FLASK_ENV` - development/production
+
+### Nginx Proxy
+The frontend nginx proxies `/api/` to the backend:
+- User app: port 8080
+- Admin app: port 8081
+- Backend API: port 5000 (internal)
+
+## Known Issues
+
+1. **E2E Tests in Docker**: Need `E2E_BASE_URL` env var to run against docker container
+2. **Architectural Deviations**: Frontend uses flat structure instead of planned plugin architecture
+3. **Shared Components**: `@vbwd/view-component` is minimal, apps have duplicate code
+
+## Documentation
+
+- **Backend Architecture**: `docs/architecture_core_server_ce/README.md`
+- **Admin Architecture**: `docs/architecture_core_view_admin/README.md`
+- **Component Architecture**: `docs/architecture_core_view_component/README.md`
+- **Development Logs**: `docs/devlog/YYYYMMDD/`
