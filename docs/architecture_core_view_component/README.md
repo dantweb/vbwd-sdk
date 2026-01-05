@@ -1,13 +1,13 @@
 # VBWD Core View Component Architecture
 
 **Project:** VBWD-SDK - Shared Core Module for User & Admin Applications
-**Status:** Partially Implemented
-**Last Updated:** 2026-01-02
+**Status:** Active Development
+**Last Updated:** 2026-01-05
 **License:** CC0 1.0 Universal (Public Domain)
 
 ---
 
-## Implementation Status (2026-01-02)
+## Implementation Status (2026-01-05)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -21,6 +21,19 @@
 | **Composables** | ✅ Implemented | useFeatureAccess |
 | **API Types** | ✅ Implemented | Shared types for API responses |
 | **UI Components** | ⚠️ Partial | Forms, layout, access components |
+
+### Architecture Decision (2026-01-05)
+
+**Decision:** Hybrid architecture - Plugin system is for extensibility, not for core features.
+
+**What the plugin system is FOR:**
+- Payment provider integrations (Stripe, PayPal, custom providers)
+- Value-added service integrations (CRM, email marketing, analytics)
+- Third-party integrations and custom extensions
+
+**What the plugin system is NOT FOR:**
+- Core business features (users, plans, subscriptions, invoices)
+- These use flat `src/views/` and `src/stores/` structure
 
 ### Plugin System (View-Core)
 
@@ -51,32 +64,92 @@ interface IPlugin {
 REGISTERED → INSTALLED → ACTIVE ⇄ INACTIVE
 ```
 
-**Usage:**
+**Usage (for payment/integration plugins):**
 ```typescript
 import { PluginRegistry, PlatformSDK } from '@vbwd/view-component';
 
 const registry = new PluginRegistry();
 const sdk = new PlatformSDK(app, router);
 
-registry.register(myPlugin);
+// Register payment provider plugins
+registry.register(stripePlugin);
+registry.register(paypalPlugin);
 await registry.installAll(sdk);
-await registry.activate('my-plugin');
+await registry.activate('stripe-payment');
 ```
 
-### Current Reality vs. Plan
+### Core SDK Usage (Decisions 2026-01-05)
 
-The `frontend/core/` package has **more** implementation than admin uses:
-- **Plugin system exists** but admin app uses flat views/ structure
-- **ApiClient exists** but admin app uses own api.ts
-- **Auth store exists** but admin has own auth.ts
-- **Event bus exists** but not used in admin
+The core SDK provides shared infrastructure that apps **must** use:
 
-### Path Forward
+| Component | Current State | Decision | Migration |
+|-----------|---------------|----------|-----------|
+| **Plugin System** | ✅ For plugins | Keep for payment/integrations | N/A |
+| **API Client** | ❌ Local api.ts | **Use core's ApiClient** | Planned |
+| **Auth Store** | ❌ Local auth.ts | **Use core's auth store** | Planned |
+| **Event Bus** | ❌ Not used | **Integrate** (FE→BE events) | Planned |
+| **Route Guards** | ✅ Uses guards | Keep as-is | N/A |
+| **Stores** | Flat stores/ | **Keep flat structure** | N/A |
 
-1. Migrate admin app to use core's ApiClient
-2. Migrate admin stores to use core's auth store
-3. Convert admin views to plugin format (optional)
-4. Add shared UI component library
+### EventBus Purpose
+
+The EventBus is used for **frontend-to-backend event communication**:
+- Frontend emits events (user actions, state changes)
+- Backend receives and processes events (analytics, webhooks, logging)
+- Enables decoupled event-driven architecture
+
+```typescript
+// Example: Frontend emits event
+eventBus.emit('subscription:cancelled', {
+  subscriptionId: '123',
+  reason: 'user_request'
+});
+
+// Backend webhook receives and processes
+```
+
+### CLI Plugin Manager (Planned)
+
+Applications extending view-core (admin, user) should include a CLI for plugin management.
+
+**Core SDK provides:** `PluginManagerCLI` class that wraps `PluginRegistry`
+
+**Commands:**
+
+```bash
+plugin list                  # List plugins with status
+plugin install <name>        # Install from registry or path
+plugin uninstall <name>      # Remove plugin
+plugin activate <name>       # Enable plugin
+plugin deactivate <name>     # Disable plugin
+plugin help                  # Show help
+```
+
+**Integration in apps:**
+
+```typescript
+// bin/plugin-manager.ts
+import { PluginManagerCLI } from '@vbwd/view-component';
+import { registry } from '../src/plugins';
+
+const cli = new PluginManagerCLI(registry, {
+  pluginsDir: './src/plugins',
+  configFile: './plugins.json'
+});
+
+cli.run(process.argv.slice(2));
+```
+
+**Configuration (`plugins.json`):**
+
+```json
+{
+  "plugins": {
+    "stripe-payment": { "enabled": true, "version": "1.2.0" },
+    "paypal-payment": { "enabled": false, "version": "1.1.0" }
+  }
+}
+```
 
 ---
 

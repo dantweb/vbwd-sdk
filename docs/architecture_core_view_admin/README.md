@@ -2,12 +2,12 @@
 
 **Project:** VBWD-SDK - Admin Dashboard Application
 **Status:** Active Development
-**Last Updated:** 2026-01-02
+**Last Updated:** 2026-01-05
 **License:** CC0 1.0 Universal (Public Domain)
 
 ---
 
-## Implementation Status (2026-01-02)
+## Implementation Status (2026-01-05)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -20,40 +20,43 @@
 | **Analytics** | ✅ Implemented | Overview, date filters |
 | **Webhook Monitor** | ✅ Implemented | List, view details, retry |
 | **Settings** | ✅ Implemented | General, email, security tabs |
-| **Plugin Architecture** | ⚠️ Deviated | Using flat views/ instead of plugins |
+| **Core Views (Flat)** | ✅ By Design | Users, Plans, Subscriptions, Invoices, Settings |
+| **Plugin Architecture** | ✅ Reserved | For payment integrations & value-added services |
 
-### Plugin System Status
+### Architecture Decision (2026-01-05)
 
-**Core SDK has full plugin system** (`frontend/core/src/plugins/`):
-- `PluginRegistry` - registration, lifecycle, dependency resolution
-- `PlatformSDK` - provides routes, components, stores to plugins
-- `IPlugin` interface with install/activate/deactivate/uninstall hooks
+**Decision:** Hybrid architecture with flat core views + plugin system for integrations.
 
-**Admin app does NOT use plugin system:**
+**Rationale:**
+- **Core business logic** (users, tariffs, subscriptions, invoices, settings) uses flat `src/views/` structure - these are foundational features that every installation needs
+- **Plugins** are reserved for extensibility: payment provider integrations (Stripe, PayPal) and value-added service provider integrations
 
-| Planned (Plugin Architecture) | Actual (Flat Structure) |
-|-------------------------------|-------------------------|
-| `src/plugins/user-management/` | `src/views/Users.vue`, `UserDetails.vue` |
-| `src/plugins/plan-management/` | `src/views/Plans.vue`, `PlanForm.vue` |
-| `src/plugins/analytics/` | `src/views/Analytics.vue` |
-| `src/plugins/*/store/` | `src/stores/*.ts` (flat) |
+**This is NOT a deviation** - it's the intended design:
 
-### Architectural Deviations
+| Component Type | Structure | Examples |
+|----------------|-----------|----------|
+| **Core Views** | Flat `src/views/` | Users, Plans, Subscriptions, Invoices, Settings, Analytics |
+| **Core Stores** | Flat `src/stores/` | auth.ts, users.ts, planAdmin.ts, subscriptions.ts, invoices.ts |
+| **Payment Plugins** | `src/plugins/payments/` | Stripe, PayPal, Custom payment providers |
+| **Integration Plugins** | `src/plugins/integrations/` | Value-added service providers |
 
-The current implementation differs from planned architecture:
+### Plugin System Usage
 
-1. **Plugin System**: Core SDK has it, but admin uses flat `src/views/` structure
-2. **Stores**: Using flat `src/stores/` instead of per-plugin stores
-3. **API Client**: Using local `api.ts` instead of core's `ApiClient`
-4. **Auth Store**: Using local `auth.ts` instead of core's auth store
-5. **Event Bus**: Core has it, but admin doesn't use it
+**Core SDK plugin system** (`frontend/core/src/plugins/`) will be used for:
 
-### Migration Decision Needed
+1. **Payment Provider Plugins**
+   - `src/plugins/payments/stripe/` - Stripe integration
+   - `src/plugins/payments/paypal/` - PayPal integration
+   - Each plugin provides: config UI, webhook handlers, payment flow components
 
-Options:
-1. **Keep flat structure**: Simpler, works well for single admin app
-2. **Migrate to plugins**: Better for extensibility, matches architecture docs
-3. **Hybrid**: Use core SDK services but keep flat view structure
+2. **Value-Added Service Plugins**
+   - Third-party integrations (CRM, email marketing, analytics providers)
+   - Custom extensions by deployment
+
+**Core admin features are NOT plugins** because:
+- They are required for every installation
+- They don't need to be swapped out or disabled
+- Flat structure is simpler and sufficient
 
 **Unit Tests:** 71 tests in 7 files
 **E2E Tests:** 108 tests in 13 spec files
@@ -62,10 +65,14 @@ Options:
 
 ## 1. Project Overview
 
-The **VBWD Admin Application** is a separate Vue.js 3 + TypeScript application for administrative operations. It shares the same **Core SDK** (`@vbwd/core-sdk`) with the user-facing application but implements admin-specific plugins.
+The **VBWD Admin Application** is a separate Vue.js 3 + TypeScript application for administrative operations. It uses a **hybrid architecture**:
+
+- **Core features** (users, plans, subscriptions, invoices, settings) use flat `src/views/` structure
+- **Extensibility** (payment providers, third-party integrations) uses the plugin system from Core SDK
 
 ### Key Features
 
+**Core Features (Flat Views):**
 - **User Management**: View, edit, suspend user accounts
 - **Plan Management**: Create, edit, deactivate tariff plans
 - **Subscription Management**: View, modify user subscriptions
@@ -73,6 +80,10 @@ The **VBWD Admin Application** is a separate Vue.js 3 + TypeScript application f
 - **Analytics Dashboard**: Metrics, charts, reports
 - **Webhook Monitoring**: View webhook logs and events
 - **Settings**: System configuration
+
+**Plugin-Based Features (Future):**
+- Payment provider configuration (Stripe, PayPal)
+- Value-added service integrations
 
 ---
 
@@ -87,33 +98,32 @@ The **VBWD Admin Application** is a separate Vue.js 3 + TypeScript application f
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                  Application Shell                       │   │
-│  │  - Admin Router (Vue Router, /admin base)               │   │
-│  │  - Plugin Loader & Registry (from Core SDK)            │   │
+│  │  - Admin Router (Vue Router)                            │   │
 │  │  - Admin Layout (sidebar, topbar)                      │   │
 │  │  - Global State (Pinia)                                │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                           │                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │             Core SDK (@vbwd/core-sdk)                    │   │
-│  │  - API Client (admin endpoints)                         │   │
-│  │  - Auth Service (role: admin required)                 │   │
-│  │  - Plugin System                                        │   │
-│  │  - Event Bus                                            │   │
-│  │  - Validation Service                                   │   │
-│  │  - Shared UI Components                                │   │
+│  │                   Core Views Layer                       │   │
+│  │            (Flat Structure - src/views/)                │   │
+│  │                                                          │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────────────┐ │   │
+│  │  │ Users.vue  │  │ Plans.vue  │  │ Subscriptions.vue  │ │   │
+│  │  └────────────┘  └────────────┘  └────────────────────┘ │   │
+│  │                                                          │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────────────┐ │   │
+│  │  │Invoices.vue│  │Analytics.vue│ │ Settings.vue       │ │   │
+│  │  └────────────┘  └────────────┘  └────────────────────┘ │   │
+│  │                                                          │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                           │                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   Admin Plugin Layer                     │   │
+│  │              Plugin Layer (Extensibility)               │   │
+│  │         (Uses Core SDK Plugin System)                   │   │
 │  │                                                          │   │
 │  │  ┌────────────────┐  ┌────────────────┐  ┌───────────┐  │   │
-│  │  │ User Mgmt      │  │ Plan Mgmt      │  │ Analytics │  │   │
-│  │  │ Plugin         │  │ Plugin         │  │ Plugin    │  │   │
-│  │  └────────────────┘  └────────────────┘  └───────────┘  │   │
-│  │                                                          │   │
-│  │  ┌────────────────┐  ┌────────────────┐  ┌───────────┐  │   │
-│  │  │ Invoice Mgmt   │  │ Webhook        │  │ Settings  │  │   │
-│  │  │ Plugin         │  │ Monitor Plugin │  │ Plugin    │  │   │
+│  │  │ Stripe Plugin  │  │ PayPal Plugin  │  │ Custom    │  │   │
+│  │  │ (payments)     │  │ (payments)     │  │ Plugins   │  │   │
 │  │  └────────────────┘  └────────────────┘  └───────────┘  │   │
 │  │                                                          │   │
 │  └──────────────────────────────────────────────────────────┘   │
@@ -130,171 +140,205 @@ The **VBWD Admin Application** is a separate Vue.js 3 + TypeScript application f
 
 ---
 
-## 3. Admin Plugins
+## 3. Core Views (Flat Structure)
 
-### 3.1 User Management Plugin
+Core admin features use flat `src/views/` structure. These are foundational features required by every installation.
+
+### 3.1 User Management
+
+**Location:** `src/views/Users.vue`, `src/views/UserDetails.vue`
+**Store:** `src/stores/users.ts`
 
 **Responsibilities:**
 - List all users with pagination, search, filters
 - View user details (profile, subscriptions, invoices)
-- Edit user profile
 - Suspend/activate user accounts
-- View user activity logs
 
 **Routes:**
-- `/admin/users` - User list
-- `/admin/users/:id` - User details
-- `/admin/users/:id/edit` - Edit user
-- `/admin/users/:id/subscriptions` - User subscriptions
-- `/admin/users/:id/invoices` - User invoices
-
-**Components:**
-- `UserList.vue` - Table with filters and search
-- `UserDetails.vue` - Full user information
-- `UserEditForm.vue` - Edit user form
-- `UserSubscriptions.vue` - User's subscription list
-- `UserActivityLog.vue` - Activity history
+- `/users` - User list
+- `/users/:id` - User details
 
 ---
 
-### 3.2 Plan Management Plugin
+### 3.2 Plan Management
+
+**Location:** `src/views/Plans.vue`, `src/views/PlanForm.vue`
+**Store:** `src/stores/planAdmin.ts`
 
 **Responsibilities:**
 - List all tariff plans
-- Create new tariff plans
-- Edit existing plans
+- Create/edit tariff plans
 - Activate/deactivate plans
 - Set pricing and features
-- Manage multi-currency pricing
 
 **Routes:**
-- `/admin/plans` - Plan list
-- `/admin/plans/new` - Create plan
-- `/admin/plans/:id/edit` - Edit plan
-- `/admin/plans/:id/pricing` - Multi-currency pricing
-
-**Components:**
-- `PlanList.vue` - Table of all plans
-- `PlanForm.vue` - Create/edit plan form
-- `PlanPricingMatrix.vue` - Currency pricing grid
-- `PlanFeatureEditor.vue` - Manage plan features
+- `/plans` - Plan list
+- `/plans/new` - Create plan
+- `/plans/:id/edit` - Edit plan
 
 ---
 
-### 3.3 Subscription Management Plugin
+### 3.3 Subscription Management
+
+**Location:** `src/views/Subscriptions.vue`, `src/views/SubscriptionDetails.vue`
+**Store:** `src/stores/subscriptions.ts`
 
 **Responsibilities:**
-- View all subscriptions with filters (status, plan, date)
-- Manual subscription activation/cancellation
-- Extend subscription periods
-- Upgrade/downgrade subscriptions
+- View all subscriptions with filters
+- Cancel subscriptions
 - View subscription history
 
 **Routes:**
-- `/admin/subscriptions` - Subscription list
-- `/admin/subscriptions/:id` - Subscription details
-- `/admin/subscriptions/:id/edit` - Modify subscription
-
-**Components:**
-- `SubscriptionList.vue` - Filterable subscription table
-- `SubscriptionDetails.vue` - Subscription info
-- `SubscriptionActions.vue` - Extend, cancel, modify
+- `/subscriptions` - Subscription list
+- `/subscriptions/:id` - Subscription details
 
 ---
 
-### 3.4 Invoice Management Plugin
+### 3.4 Invoice Management
+
+**Location:** `src/views/Invoices.vue`, `src/views/InvoiceDetails.vue`
+**Store:** `src/stores/invoices.ts`
 
 **Responsibilities:**
 - List all invoices with filters
-- View invoice details
+- View invoice details with line items
 - Manual payment marking
-- Generate invoice PDFs
-- Resend invoice emails
-- View payment provider references
 
 **Routes:**
-- `/admin/invoices` - Invoice list
-- `/admin/invoices/:id` - Invoice details
-
-**Components:**
-- `InvoiceList.vue` - Invoice table with filters
-- `InvoiceDetails.vue` - Full invoice view
-- `InvoiceActions.vue` - Mark paid, resend, download
+- `/invoices` - Invoice list
+- `/invoices/:id` - Invoice details
 
 ---
 
-### 3.5 Analytics Plugin
+### 3.5 Analytics Dashboard
+
+**Location:** `src/views/Analytics.vue`, `src/views/Dashboard.vue`
+**Store:** `src/stores/analytics.ts`
 
 **Responsibilities:**
-- Dashboard with key metrics (MRR, ARR, churn)
-- Revenue charts (daily, monthly, yearly)
-- User growth charts
-- Subscription conversion funnel
-- Plan popularity statistics
-- Payment method breakdown
+- Dashboard with key metrics
+- Revenue overview
+- User growth
+- Plan distribution
 
 **Routes:**
-- `/admin/analytics` - Main dashboard
-- `/admin/analytics/revenue` - Revenue reports
-- `/admin/analytics/users` - User analytics
-- `/admin/analytics/subscriptions` - Subscription metrics
-
-**Components:**
-- `AnalyticsDashboard.vue` - Overview with KPIs
-- `RevenueChart.vue` - Revenue visualization (Chart.js/ECharts)
-- `UserGrowthChart.vue` - User growth over time
-- `ConversionFunnel.vue` - Signup to paid conversion
-- `PlanDistribution.vue` - Plan popularity pie chart
+- `/` - Dashboard overview
+- `/analytics` - Detailed analytics
 
 ---
 
-### 3.6 Webhook Monitor Plugin
+### 3.6 Webhook Monitor
+
+**Location:** `src/views/Webhooks.vue`, `src/views/WebhookDetails.vue`
+**Store:** `src/stores/webhooks.ts`
 
 **Responsibilities:**
-- View webhook events from payment providers
+- View webhook events
 - View event payloads
 - Retry failed webhooks
-- View webhook processing logs
-- Filter by provider, event type, status
 
 **Routes:**
-- `/admin/webhooks` - Webhook event list
-- `/admin/webhooks/:id` - Event details
-
-**Components:**
-- `WebhookList.vue` - Event list with filters
-- `WebhookDetails.vue` - Event payload viewer (JSON)
-- `WebhookRetry.vue` - Retry failed webhook
+- `/webhooks` - Webhook list
+- `/webhooks/:id` - Event details
 
 ---
 
-### 3.7 Settings Plugin
+### 3.7 Settings
+
+**Location:** `src/views/Settings.vue`
 
 **Responsibilities:**
-- System configuration
-- Email template management
-- SMTP settings
-- Payment provider settings (Stripe/PayPal keys)
-- Tax configuration
-- Currency management
+- Company information
+- Billing settings
+- Notification preferences
 
 **Routes:**
-- `/admin/settings` - Settings dashboard
-- `/admin/settings/email` - Email settings
-- `/admin/settings/payments` - Payment config
-- `/admin/settings/taxes` - Tax settings
-
-**Components:**
-- `SettingsDashboard.vue` - Settings navigation
-- `EmailSettings.vue` - Email config form
-- `PaymentSettings.vue` - Payment provider config
-- `TaxSettings.vue` - Tax configuration
+- `/settings` - Settings page with tabs
 
 ---
 
-## 4. Admin Layout Structure
+## 4. Plugin Layer (Extensibility)
 
-### 4.1 Admin Layout Component
+Plugins are used for features that:
+- May vary between installations (payment providers)
+- Need to be added/removed dynamically
+- Integrate with external services
+
+### 4.1 Payment Provider Plugins (Planned)
+
+**Location:** `src/plugins/payments/`
+
+| Plugin | Purpose |
+|--------|---------|
+| `stripe/` | Stripe payment integration, config UI, webhook handling |
+| `paypal/` | PayPal payment integration, config UI, webhook handling |
+
+Each payment plugin provides:
+- Configuration UI in Settings
+- Payment flow components
+- Webhook event handlers
+
+### 4.2 Value-Added Service Plugins (Planned)
+
+**Location:** `src/plugins/integrations/`
+
+For third-party integrations like:
+- CRM systems
+- Email marketing platforms
+- Analytics providers
+- Custom extensions
+
+### 4.3 CLI Plugin Manager (Planned)
+
+Each application that extends view-core (admin, user) should include a CLI tool for plugin management.
+
+**Location:** `bin/plugin-manager` or `npm run plugin`
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `plugin list` | List all registered plugins with status (active/inactive) |
+| `plugin install <name>` | Install a plugin from registry or local path |
+| `plugin uninstall <name>` | Remove a plugin from the application |
+| `plugin activate <name>` | Activate an installed plugin |
+| `plugin deactivate <name>` | Deactivate a plugin without removing it |
+| `plugin help` | Show help and available commands |
+
+**Example Usage:**
+
+```bash
+# List all plugins
+npm run plugin list
+
+# Output:
+# NAME              VERSION   STATUS      DESCRIPTION
+# stripe-payment    1.2.0     active      Stripe payment provider
+# paypal-payment    1.1.0     inactive    PayPal payment provider
+# mailchimp         0.9.0     active      Mailchimp email integration
+
+# Install a plugin
+npm run plugin install @vbwd/stripe-payment
+
+# Activate/deactivate
+npm run plugin activate paypal-payment
+npm run plugin deactivate stripe-payment
+
+# Uninstall
+npm run plugin uninstall mailchimp
+```
+
+**Implementation Notes:**
+- CLI wraps `PluginRegistry` from view-core
+- Plugins stored in `src/plugins/` directory
+- Plugin state persisted in `plugins.json` config file
+- Requires app restart after install/uninstall (hot reload for activate/deactivate planned)
+
+---
+
+## 5. Admin Layout Structure
+
+### 5.1 Admin Layout Component
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -339,7 +383,7 @@ The **VBWD Admin Application** is a separate Vue.js 3 + TypeScript application f
 
 ---
 
-## 5. Directory Structure
+## 6. Directory Structure
 
 ```
 frontend/admin/vue/
@@ -354,55 +398,61 @@ frontend/admin/vue/
 │   ├── main.ts                    # Admin app entry point
 │   ├── App.vue                    # Root component
 │   │
+│   ├── api/
+│   │   └── index.ts               # API client
+│   │
 │   ├── layouts/
 │   │   ├── AdminLayout.vue        # Main admin layout
 │   │   ├── AdminTopbar.vue        # Top navigation bar
 │   │   └── AdminSidebar.vue       # Left sidebar menu
 │   │
-│   ├── plugins/                   # Admin-specific plugins
-│   │   ├── user-management/
-│   │   │   ├── index.ts           # Plugin entry
-│   │   │   ├── routes.ts
-│   │   │   ├── store/
-│   │   │   │   └── userAdminStore.ts
-│   │   │   ├── components/
-│   │   │   │   ├── UserList.vue
-│   │   │   │   ├── UserDetails.vue
-│   │   │   │   └── UserEditForm.vue
-│   │   │   └── composables/
-│   │   │       └── useUserManagement.ts
-│   │   │
-│   │   ├── plan-management/
-│   │   │   ├── index.ts
-│   │   │   ├── routes.ts
-│   │   │   ├── store/
-│   │   │   │   └── planAdminStore.ts
-│   │   │   ├── components/
-│   │   │   │   ├── PlanList.vue
-│   │   │   │   ├── PlanForm.vue
-│   │   │   │   └── PlanPricingMatrix.vue
-│   │   │   └── composables/
-│   │   │       └── usePlanManagement.ts
-│   │   │
-│   │   ├── subscription-management/
-│   │   ├── invoice-management/
-│   │   ├── analytics/
-│   │   ├── webhook-monitor/
-│   │   └── settings/
+│   ├── stores/                    # Pinia stores (flat structure)
+│   │   ├── index.ts               # Barrel exports
+│   │   ├── auth.ts                # Authentication store
+│   │   ├── users.ts               # User management store
+│   │   ├── planAdmin.ts           # Plan management store
+│   │   ├── subscriptions.ts       # Subscription store
+│   │   ├── invoices.ts            # Invoice store
+│   │   ├── webhooks.ts            # Webhook store
+│   │   └── analytics.ts           # Analytics store
 │   │
-│   ├── views/
-│   │   └── Dashboard.vue          # Admin dashboard
+│   ├── views/                     # Core views (flat structure)
+│   │   ├── Login.vue              # Admin login
+│   │   ├── Forbidden.vue          # 403 error page
+│   │   ├── Dashboard.vue          # Dashboard overview
+│   │   ├── Users.vue              # User list
+│   │   ├── UserDetails.vue        # User detail view
+│   │   ├── Plans.vue              # Plan list
+│   │   ├── PlanForm.vue           # Create/edit plan
+│   │   ├── Subscriptions.vue      # Subscription list
+│   │   ├── SubscriptionDetails.vue# Subscription detail
+│   │   ├── Invoices.vue           # Invoice list
+│   │   ├── InvoiceDetails.vue     # Invoice detail
+│   │   ├── Webhooks.vue           # Webhook list
+│   │   ├── WebhookDetails.vue     # Webhook detail
+│   │   ├── Analytics.vue          # Analytics dashboard
+│   │   └── Settings.vue           # Settings page
+│   │
+│   ├── plugins/                   # Extension plugins (future)
+│   │   ├── payments/              # Payment provider plugins
+│   │   │   ├── stripe/            # Stripe integration
+│   │   │   └── paypal/            # PayPal integration
+│   │   └── integrations/          # Value-added services
 │   │
 │   └── router/
 │       └── index.ts               # Admin router config
 │
 ├── tests/
-│   ├── unit/
-│   └── e2e/
+│   ├── unit/                      # Vitest unit tests
+│   │   ├── stores/
+│   │   └── ...
+│   ├── integration/               # Component integration tests
+│   │   └── ...
+│   └── e2e/                       # Playwright E2E tests
 │       ├── admin-login.spec.ts
-│       ├── user-management.spec.ts
-│       ├── plan-management.spec.ts
-│       └── analytics.spec.ts
+│       ├── admin-users.spec.ts
+│       ├── admin-plans.spec.ts
+│       └── ...
 │
 └── node_modules/
     └── @vbwd/core -> ../../core   # Symlink to core SDK
@@ -410,9 +460,9 @@ frontend/admin/vue/
 
 ---
 
-## 6. Authentication & Access Control
+## 7. Authentication & Access Control
 
-### 6.1 Admin Authentication
+### 7.1 Admin Authentication
 
 Admin login is separate from user login but uses the same AuthService from Core SDK.
 
@@ -422,7 +472,7 @@ Admin login is separate from user login but uses the same AuthService from Core 
 - Separate session management
 - Admin-only API endpoints (`/api/v1/admin/*`)
 
-### 6.2 Route Protection
+### 7.2 Route Protection
 
 All admin routes require:
 1. Authentication (via `authGuard`)
@@ -443,9 +493,9 @@ All admin routes require:
 
 ---
 
-## 7. Admin API Endpoints (Backend)
+## 8. Admin API Endpoints (Backend)
 
-### 7.1 User Management
+### 8.1 User Management
 - `GET /api/v1/admin/users` - List users (paginated)
 - `GET /api/v1/admin/users/:id` - Get user details
 - `PUT /api/v1/admin/users/:id` - Update user
@@ -453,38 +503,38 @@ All admin routes require:
 - `GET /api/v1/admin/users/:id/subscriptions` - User subscriptions
 - `GET /api/v1/admin/users/:id/invoices` - User invoices
 
-### 7.2 Plan Management
+### 8.2 Plan Management
 - `GET /api/v1/admin/tarif-plans` - List all plans (including inactive)
 - `POST /api/v1/admin/tarif-plans` - Create plan
 - `PUT /api/v1/admin/tarif-plans/:id` - Update plan
 - `DELETE /api/v1/admin/tarif-plans/:id` - Deactivate plan
 
-### 7.3 Subscription Management
+### 8.3 Subscription Management
 - `GET /api/v1/admin/subscriptions` - List all subscriptions
 - `GET /api/v1/admin/subscriptions/:id` - Get subscription
 - `PUT /api/v1/admin/subscriptions/:id` - Update subscription
 - `PUT /api/v1/admin/subscriptions/:id/cancel` - Cancel subscription
 - `PUT /api/v1/admin/subscriptions/:id/extend` - Extend subscription
 
-### 7.4 Invoice Management
+### 8.4 Invoice Management
 - `GET /api/v1/admin/invoices` - List all invoices
 - `GET /api/v1/admin/invoices/:id` - Get invoice
 - `PUT /api/v1/admin/invoices/:id/mark-paid` - Manually mark as paid
 
-### 7.5 Analytics
+### 8.5 Analytics
 - `GET /api/v1/admin/analytics/overview` - Dashboard metrics
 - `GET /api/v1/admin/analytics/revenue` - Revenue data
 - `GET /api/v1/admin/analytics/users` - User growth data
 - `GET /api/v1/admin/analytics/subscriptions` - Subscription metrics
 
-### 7.6 Webhooks
+### 8.6 Webhooks
 - `GET /api/v1/admin/webhooks` - List webhook events
 - `GET /api/v1/admin/webhooks/:id` - Get event details
 - `POST /api/v1/admin/webhooks/:id/retry` - Retry failed webhook
 
 ---
 
-## 8. Shared Core SDK Usage
+## 9. Shared Core SDK Usage
 
 The admin app uses the same Core SDK as the user app:
 
@@ -510,7 +560,7 @@ const plans = await sdk.apiClient.admin.plans.list();
 
 ---
 
-## 9. Development Principles
+## 10. Development Principles
 
 - **TDD First**: Write E2E tests for admin workflows
 - **SOLID**: Admin plugins implement IPlugin
@@ -521,9 +571,9 @@ const plans = await sdk.apiClient.admin.plans.list();
 
 ---
 
-## 10. Testing Strategy
+## 11. Testing Strategy
 
-### 10.1 E2E Tests (Playwright)
+### 11.1 E2E Tests (Playwright)
 
 **Critical Flows:**
 - Admin login with valid/invalid credentials
@@ -556,7 +606,7 @@ test('admin can suspend user account', async ({ page }) => {
 });
 ```
 
-### 10.2 Unit Tests (Vitest)
+### 11.2 Unit Tests (Vitest)
 
 - Admin store logic
 - Admin composables
@@ -564,30 +614,30 @@ test('admin can suspend user account', async ({ page }) => {
 
 ---
 
-## 11. UI/UX Design
+## 12. UI/UX Design
 
-### 11.1 Admin Theme
+### 12.1 Admin Theme
 - Darker sidebar for admin feel
 - Tables with pagination and sorting
 - Search and filter components
 - Action buttons with confirmation dialogs
 - Toast notifications for success/error
 
-### 11.2 Data Tables
+### 12.2 Data Tables
 - Pagination (10, 25, 50, 100 per page)
 - Column sorting
 - Search/filter bar
 - Bulk actions (select multiple rows)
 - Export to CSV
 
-### 11.3 Forms
+### 12.3 Forms
 - Validation with immediate feedback
 - Save/Cancel actions
 - Dirty state tracking ("You have unsaved changes")
 
 ---
 
-## 12. PlantUML Diagrams
+## 13. PlantUML Diagrams
 
 All admin architecture diagrams:
 

@@ -3,6 +3,12 @@
 **Date:** 2026-01-05
 **Priority:** High
 **Type:** Technical Debt + Testing
+**Status:** SUPERSEDED
+
+> **Note:** This sprint has been superseded by specific decision documents and sprints:
+> - Architecture decisions → `done/01-architectural-decision-plugin-vs-flat.md`
+> - Core SDK migration → `todo/03-core-sdk-migration.md`
+> - E2E tests → `todo/04-e2e-integration-user-subscription-flow.md`
 
 ---
 
