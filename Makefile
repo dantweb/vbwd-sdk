@@ -1,4 +1,4 @@
-.PHONY: up down up-build logs ps clean
+.PHONY: up down up-build rebuild-admin logs ps clean
 
 # Start all containers (backend + frontend)
 up:
@@ -13,6 +13,13 @@ up-build:
 	cd vbwd-frontend/user && docker-compose up -d --build 2>/dev/null || true
 	cd vbwd-frontend/admin && docker-compose up -d --build 2>/dev/null || true
 	@echo "All services rebuilt and started"
+
+# Rebuild and restart only the admin frontend
+rebuild-admin:
+	cd vbwd-frontend/admin/vue && npm run build
+	cd vbwd-frontend/admin && docker-compose down
+	cd vbwd-frontend/admin && docker-compose up -d --build
+	@echo "Admin frontend rebuilt and restarted at http://localhost:8081"
 
 # Stop all containers
 down:

@@ -15,6 +15,19 @@ cd vbwd-frontend && make up
 **Admin Panel:** http://localhost:8081
 **User App:** http://localhost:8080
 
+## Development Commands
+
+```bash
+# From root directory
+make up              # Start all services
+make up-build        # Rebuild and start all services
+make rebuild-admin   # Rebuild only admin frontend (fast iteration)
+make down            # Stop all services
+make ps              # Show status of all containers
+make logs            # View backend logs
+make clean           # Remove all containers and volumes
+```
+
 ## Tech Stack
 
 | Layer | Technology |
