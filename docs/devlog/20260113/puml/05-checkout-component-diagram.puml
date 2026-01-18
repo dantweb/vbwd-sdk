@@ -1,0 +1,142 @@
+@startuml checkout-component-diagram
+!theme plain
+title Checkout System - Event-Driven Component Architecture
+
+package "Frontend (Vue.js)" {
+    [Plans.vue] as Plans
+    [Checkout.vue] as Checkout
+    [CheckoutStore] as CheckoutStore
+    [PlansStore] as PlansStore
+    [API Client] as APIClient
+}
+
+package "Backend API" {
+    package "Routes (emit events)" #LightYellow {
+        [/tarif-plans] as PlanRoutes
+        [/user/subscribe] as SubscribeRoute
+        [/webhooks/:provider] as WebhookRoute
+    }
+
+    package "Event System" #LightBlue {
+        [EventDispatcher] as Dispatcher
+
+        package "Command Handlers" {
+            [SubscriptionCreateHandler] as SubCreateHandler
+        }
+
+        package "Domain Event Handlers" {
+            [EmailHandler] as EmailH
+            [WebhookHandler] as WebhookH
+            [AnalyticsHandler] as AnalyticsH
+        }
+    }
+
+    package "Services" {
+        [SubscriptionService] as SubService
+        [InvoiceService] as InvService
+        [PaymentService] as PayService
+    }
+
+    package "Repositories" {
+        [SubscriptionRepository] as SubRepo
+        [TarifPlanRepository] as PlanRepo
+        [InvoiceRepository] as InvRepo
+    }
+}
+
+package "Plugin System" {
+    [PluginManager] as PluginMgr
+    [PaymentProviderRegistry] as PayRegistry
+
+    package "Payment Plugins" #LightGreen {
+        [StripePlugin] as StripeP
+        [PayPalPlugin] as PayPalP
+        [ManualPlugin] as ManualP
+    }
+}
+
+database "PostgreSQL" as DB {
+    [subscriptions]
+    [invoices]
+    [tarif_plans]
+}
+
+cloud "External Services" {
+    [Stripe API] as StripeAPI
+    [PayPal API] as PayPalAPI
+    [Email Service] as EmailSvc
+}
+
+' Frontend relationships
+Plans --> PlansStore
+Checkout --> CheckoutStore
+PlansStore --> APIClient
+CheckoutStore --> APIClient
+APIClient --> PlanRoutes
+APIClient --> SubscribeRoute
+
+' Route to Event System (KEY: routes emit events)
+PlanRoutes --> PlanRepo : direct read
+SubscribeRoute --> Dispatcher : emit command event
+WebhookRoute --> Dispatcher : emit payment event
+
+' Event System to Handlers
+Dispatcher --> SubCreateHandler : dispatch
+
+' Handler to Services (KEY: handlers call services)
+SubCreateHandler --> SubService
+SubCreateHandler --> InvService
+SubCreateHandler --> Dispatcher : emit domain events
+
+' Domain events to side effect handlers
+Dispatcher --> EmailH
+Dispatcher --> WebhookH
+Dispatcher --> AnalyticsH
+
+' Side effect handlers to external
+EmailH --> EmailSvc
+WebhookH --> PayRegistry
+
+' Service to Repository
+SubService --> SubRepo
+InvService --> InvRepo
+PayService --> PayRegistry
+
+' Repository to DB
+SubRepo --> DB
+PlanRepo --> DB
+InvRepo --> DB
+
+' Plugin relationships
+PluginMgr --> StripeP
+PluginMgr --> PayPalP
+PluginMgr --> ManualP
+StripeP --> PayRegistry
+PayPalP --> PayRegistry
+ManualP --> PayRegistry
+
+' External APIs
+StripeP --> StripeAPI
+PayPalP --> PayPalAPI
+
+note right of SubscribeRoute
+  **Key Principle:**
+  Routes emit events,
+  NOT call services directly
+end note
+
+note bottom of SubCreateHandler
+  **Handler Flow:**
+  1. Receive command event
+  2. Call services
+  3. Emit domain events
+  4. Return EventResult
+end note
+
+note bottom of Dispatcher
+  **Event Types:**
+  Command: triggers action
+  Domain: records what happened
+end note
+
+@enduml

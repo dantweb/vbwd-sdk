@@ -1,0 +1,143 @@
+@startuml payment-plugin-architecture
+!theme plain
+title Payment Provider Plugin Architecture - Event-Driven
+
+rectangle "Route Layer" {
+    component CheckoutRoute as "POST /user/checkout"
+    component WebhookRoute as "POST /webhooks/:provider"
+}
+
+rectangle "Event System" #LightBlue {
+    component EventDispatcher
+
+    rectangle "Events" {
+        component CheckoutRequestedEvent
+        component PaymentCapturedEvent
+        component PaymentFailedEvent
+    }
+
+    rectangle "Handlers" {
+        component CheckoutHandler
+        component PaymentCapturedHandler
+    }
+}
+
+rectangle "Payment Service Layer" {
+    component PaymentService
+    component PaymentProviderRegistry
+
+    note right of PaymentService
+      PaymentService responsibilities:
+      - Get provider from registry
+      - Create payment intent
+      - Verify webhook signatures
+      - Route callbacks to events
+    end note
+}
+
+rectangle "Plugin System" {
+    component PluginManager
+
+    rectangle "Payment Plugins" #LightGreen {
+        component StripePlugin
+        component PayPalPlugin
+        component ManualPaymentPlugin
+
+        note bottom of ManualPaymentPlugin
+          **Default Provider:**
+          No external gateway.
+          Invoice remains pending.
+          Admin marks paid manually.
+        end note
+    }
+}
+
+rectangle "Payment Providers" {
+    component IPaymentProvider
+
+    component StripeProvider
+    component PayPalProvider
+    component ManualProvider
+
+    note right of IPaymentProvider
+      Provider Interface:
+      - create_intent(amount, currency)
+      - capture(intent_id)
+      - refund(payment_ref)
+      - verify_webhook(payload, sig)
+    end note
+}
+
+rectangle "Services" {
+    component SubscriptionService
+    component InvoiceService
+    component TokenService
+}
+
+' Route to Event flow
+CheckoutRoute --> CheckoutRequestedEvent : emit
+WebhookRoute --> PaymentService : verify & route
+
+' Event dispatch
+CheckoutRequestedEvent --> EventDispatcher
+EventDispatcher --> CheckoutHandler
+
+' Checkout handler creates pending items
+CheckoutHandler --> SubscriptionService : create (pending)
+CheckoutHandler --> InvoiceService : create invoice
+CheckoutHandler --> TokenService : create purchase (pending)
+
+' Webhook flow
+PaymentService --> PaymentProviderRegistry : get provider
+PaymentProviderRegistry --> IPaymentProvider : return
+PaymentService --> IPaymentProvider : verify_webhook()
+PaymentService --> PaymentCapturedEvent : emit on success
+PaymentService --> PaymentFailedEvent : emit on failure
+
+' Payment captured flow
+PaymentCapturedEvent --> EventDispatcher
+EventDispatcher --> PaymentCapturedHandler
+
+PaymentCapturedHandler --> InvoiceService : mark paid
+PaymentCapturedHandler --> SubscriptionService : activate
+PaymentCapturedHandler --> TokenService : credit tokens
+
+' Provider implementations
+IPaymentProvider <|-- StripeProvider
+IPaymentProvider <|-- PayPalProvider
+IPaymentProvider <|-- ManualProvider
+
+' Plugin registrations
+PluginManager --> StripePlugin
+PluginManager --> PayPalPlugin
+PluginManager --> ManualPaymentPlugin
+
+StripePlugin --> StripeProvider : creates
+PayPalPlugin --> PayPalProvider : creates
+ManualPaymentPlugin --> ManualProvider : creates
+
+StripePlugin --> PaymentProviderRegistry : register on enable
+PayPalPlugin --> PaymentProviderRegistry : register on enable
+ManualPaymentPlugin --> PaymentProviderRegistry : register on enable
+
+note as N1
+  **Payment Flow:**
+  1. Checkout creates PENDING invoice
+  2. Frontend redirects to payment provider
+  3. User completes payment
+  4. Webhook received at /webhooks/:provider
+  5. PaymentService verifies signature
+  6. PaymentCapturedEvent emitted
+  7. Handler activates subscription & credits tokens
+end note
+
+note as N2
+  **Plugin Registration:**
+  1. PluginManager.enable("stripe")
+  2. StripePlugin.on_enable() called
+  3. StripeProvider created with config
+  4. Provider registered in registry
+  5. PaymentService can use "stripe"
+end note
+
+@enduml

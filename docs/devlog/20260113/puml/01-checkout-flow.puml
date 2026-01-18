@@ -1,0 +1,107 @@
+@startuml checkout-flow
+!theme plain
+title User Checkout Flow - Payment-First Activation
+
+actor User
+participant "Frontend\n(Vue.js)" as FE
+participant "API Gateway\n/api/v1" as API
+participant "CheckoutRoute\n(user.py)" as Route
+participant "EventDispatcher" as Dispatcher
+participant "CheckoutHandler" as CheckoutH
+participant "PaymentCaptured\nHandler" as PaymentH
+participant "SubscriptionService" as SubSvc
+participant "TokenService" as TokenSvc
+participant "InvoiceService" as InvSvc
+database "PostgreSQL" as DB
+
+== Plan Selection ==
+User -> FE: Browse /plans
+FE -> API: GET /tarif-plans
+API --> FE: { plans: [...] }
+FE --> User: Display plan cards
+
+== Checkout with Optional Items ==
+User -> FE: Select Plan
+FE --> User: Show checkout page
+User -> FE: Add token bundle (optional)
+User -> FE: Add add-on (optional)
+FE --> User: Show order summary
+
+== Create Checkout (All PENDING) ==
+User -> FE: Click Confirm Purchase
+FE -> API: POST /user/checkout\n{ plan_id, token_bundle_ids, add_on_ids }
+API -> Route: checkout()
+
+note over Route: Route validates input\nand emits command event
+
+Route -> Dispatcher: emit(CheckoutRequestedEvent)
+
+Dispatcher -> CheckoutH: handle(event)
+
+note over CheckoutH #LightYellow: All items created as PENDING\nNOT active yet
+
+CheckoutH -> SubSvc: create_subscription(status=PENDING)
+SubSvc -> DB: INSERT subscription (pending)
+DB --> SubSvc: subscription
+
+CheckoutH -> TokenSvc: create_purchase(status=PENDING)
+TokenSvc -> DB: INSERT token_bundle_purchase (pending)
+DB --> TokenSvc: purchase
+
+CheckoutH -> InvSvc: create_invoice(line_items)
+InvSvc -> DB: INSERT invoice + line_items
+DB --> InvSvc: invoice
+
+CheckoutH -> Dispatcher: emit("subscription:created", status=pending)
+CheckoutH -> Dispatcher: emit("invoice:created")
+
+CheckoutH --> Dispatcher: EventResult.success()
+Dispatcher --> Route: result
+Route --> API: 201 Created\n{ subscription(pending), invoice(pending) }
+API --> FE: Response with pending items
+FE --> User: Show invoice\nAwaiting payment
+
+== Payment Processing ==
+note over User: User completes payment\n(Stripe, PayPal, bank transfer, etc.)
+
+participant "Payment\nWebhook" as Webhook
+Webhook -> API: POST /webhooks/payment\n{ invoice_id, payment_ref, amount }
+API -> Dispatcher: emit(PaymentCapturedEvent)
+
+Dispatcher -> PaymentH: handle(event)
+
+note over PaymentH #LightGreen: Payment received!\nActivate all items
+
+PaymentH -> InvSvc: mark_paid(invoice_id)
+InvSvc -> DB: UPDATE invoice status=paid
+DB --> InvSvc: invoice with line_items
+
+loop For each line item
+    alt Subscription
+        PaymentH -> SubSvc: activate(subscription_id)
+        SubSvc -> DB: UPDATE subscription status=active
+        PaymentH -> Dispatcher: emit("subscription:activated")
+    else Token Bundle
+        PaymentH -> TokenSvc: complete_purchase(purchase_id)
+        TokenSvc -> DB: UPDATE purchase status=completed
+        PaymentH -> TokenSvc: credit_tokens(user_id, amount)
+        TokenSvc -> DB: UPDATE user_token_balance
+        TokenSvc -> DB: INSERT token_transaction
+        PaymentH -> Dispatcher: emit("tokens:credited")
+    else Add-on
+        PaymentH -> SubSvc: activate_addon(addon_id)
+        SubSvc -> DB: UPDATE addon_subscription status=active
+        PaymentH -> Dispatcher: emit("addon:activated")
+    end
+end
+
+PaymentH --> Dispatcher: EventResult.success()
+
+note right of Dispatcher: Other handlers react:\n- Send confirmation email\n- Trigger webhooks\n- Update analytics
+
+== User Sees Active Status ==
+FE -> API: GET /user/subscription
+API --> FE: { subscription(active), tokens_balance }
+FE --> User: Show active subscription\nShow token balance
+
+@enduml

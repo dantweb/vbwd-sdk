@@ -1,0 +1,119 @@
+@startuml checkout-event-system
+!theme plain
+title Checkout Event System - Payment-First Activation
+
+rectangle "Route Layer" {
+    component CheckoutRoute as "POST /user/checkout"
+    component WebhookRoute as "POST /webhooks/payment"
+}
+
+rectangle "Event Dispatcher" {
+    component DomainEventDispatcher
+}
+
+rectangle "Command Events" #LightYellow {
+    component CheckoutRequestedEvent
+    component PaymentCapturedEvent
+    note bottom of CheckoutRequestedEvent
+      Triggers checkout creation:
+      - plan_id
+      - token_bundle_ids[]
+      - add_on_ids[]
+    end note
+}
+
+rectangle "Checkout Handler" #LightBlue {
+    component CheckoutHandler
+    note right of CheckoutHandler
+      Creates all items as PENDING:
+      1. Subscription (pending)
+      2. Token bundles (pending)
+      3. Add-ons (pending)
+      4. Invoice with line items
+    end note
+}
+
+rectangle "Payment Handler" #LightGreen {
+    component PaymentCapturedHandler
+    note right of PaymentCapturedHandler
+      Activates items on payment:
+      1. Mark invoice paid
+      2. Activate subscription
+      3. Credit tokens to balance
+      4. Activate add-ons
+    end note
+}
+
+rectangle "Domain Events" #PaleGreen {
+    component SubscriptionCreatedEvent
+    component InvoiceCreatedEvent
+    component SubscriptionActivatedEvent
+    component TokensCreditedEvent
+    component AddOnActivatedEvent
+}
+
+rectangle "Side Effect Handlers" {
+    component EmailHandler
+    component WebhookHandler
+    component AnalyticsHandler
+}
+
+rectangle "Services" {
+    component SubscriptionService
+    component TokenService
+    component InvoiceService
+    component AddOnService
+}
+
+CheckoutRoute --> CheckoutRequestedEvent : creates
+WebhookRoute --> PaymentCapturedEvent : creates
+
+CheckoutRequestedEvent --> DomainEventDispatcher : emit
+PaymentCapturedEvent --> DomainEventDispatcher : emit
+
+DomainEventDispatcher --> CheckoutHandler : dispatch
+DomainEventDispatcher --> PaymentCapturedHandler : dispatch
+
+CheckoutHandler --> SubscriptionService : calls
+CheckoutHandler --> TokenService : calls
+CheckoutHandler --> InvoiceService : calls
+
+PaymentCapturedHandler --> SubscriptionService : activate
+PaymentCapturedHandler --> TokenService : credit tokens
+PaymentCapturedHandler --> InvoiceService : mark paid
+
+CheckoutHandler --> SubscriptionCreatedEvent : emits (pending)
+CheckoutHandler --> InvoiceCreatedEvent : emits
+
+PaymentCapturedHandler --> SubscriptionActivatedEvent : emits
+PaymentCapturedHandler --> TokensCreditedEvent : emits
+PaymentCapturedHandler --> AddOnActivatedEvent : emits
+
+SubscriptionCreatedEvent --> DomainEventDispatcher
+InvoiceCreatedEvent --> DomainEventDispatcher
+SubscriptionActivatedEvent --> DomainEventDispatcher
+TokensCreditedEvent --> DomainEventDispatcher
+AddOnActivatedEvent --> DomainEventDispatcher
+
+DomainEventDispatcher --> EmailHandler
+DomainEventDispatcher --> WebhookHandler
+DomainEventDispatcher --> AnalyticsHandler
+
+note as N1
+  **Payment-First Flow:**
+  1. Checkout creates PENDING items
+  2. User completes payment
+  3. PaymentCapturedEvent triggers
+  4. Handler activates all items
+  5. Tokens credited to balance
+end note
+
+note as N2
+  **Invoice Line Items:**
+  - Subscription
+  - Token bundles
+  - Add-ons
+  All pending until payment
+end note
+
+@enduml

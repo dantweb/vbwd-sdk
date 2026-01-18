@@ -21,6 +21,12 @@ rebuild-admin:
 	cd vbwd-frontend/admin && docker-compose up -d --build
 	@echo "Admin frontend rebuilt and restarted at http://localhost:8081"
 
+rebuild-user:
+	cd vbwd-frontend/user && npm run build
+	cd vbwd-frontend/user && docker-compose down
+	cd vbwd-frontend/user && docker-compose up -d --build
+	@echo "User frontend rebuilt and restarted at http://localhost:8080"
+
 # Stop all containers
 down:
 	cd vbwd-frontend/admin && docker-compose down 2>/dev/null || true

@@ -1,0 +1,114 @@
+@startuml checkout-state-diagram
+!theme plain
+title Checkout and Payment State Diagram
+
+state UserJourney {
+    [*] --> BrowsingPlans
+
+    state BrowsingPlans
+    state SelectingAddons
+    state CheckoutPage
+    state AwaitingPayment
+    state PaymentProcessing
+    state CheckoutComplete
+
+    BrowsingPlans --> CheckoutPage : Select Plan
+    CheckoutPage --> SelectingAddons : Add bundles or addons
+    SelectingAddons --> CheckoutPage : Done
+    CheckoutPage --> AwaitingPayment : Confirm Purchase
+    AwaitingPayment --> PaymentProcessing : Payment initiated
+    PaymentProcessing --> CheckoutComplete : Payment Success
+    PaymentProcessing --> AwaitingPayment : Payment Failed
+    CheckoutComplete --> [*]
+}
+
+state SubscriptionStates {
+    [*] --> SubPending
+
+    state SubPending : Created at checkout
+    state SubActive : Payment received
+    state SubCancelling : Will cancel at period end
+    state SubCancelled : User cancelled
+    state SubExpired : Period ended
+
+    SubPending --> SubActive : PaymentCapturedEvent
+    SubPending --> SubCancelled : Payment failed or timeout
+    SubActive --> SubCancelling : User requests cancel
+    SubActive --> SubExpired : Period ends
+    SubCancelling --> SubCancelled : Period ends
+    SubCancelled --> [*]
+    SubExpired --> [*]
+}
+
+state TokenBundleStates {
+    [*] --> BundlePending
+
+    state BundlePending : Created at checkout
+    state BundleCompleted : Tokens credited
+    state BundleRefunded : Payment refunded
+
+    BundlePending --> BundleCompleted : PaymentCapturedEvent
+    BundlePending --> BundleRefunded : Payment failed
+    BundleCompleted --> BundleRefunded : Refund issued
+    BundleRefunded --> [*]
+    BundleCompleted --> [*]
+}
+
+state AddOnStates {
+    [*] --> AddonPending
+
+    state AddonPending : Created at checkout
+    state AddonActive : Payment received
+    state AddonCancelled : Cancelled
+
+    AddonPending --> AddonActive : PaymentCapturedEvent
+    AddonPending --> AddonCancelled : Payment failed
+    AddonActive --> AddonCancelled : User cancels
+    AddonCancelled --> [*]
+}
+
+state InvoiceStates {
+    [*] --> InvPending
+
+    state InvPending : Awaiting payment
+    state InvPaid : Payment received
+    state InvFailed : Payment failed
+    state InvCancelled : Invoice cancelled
+    state InvRefunded : Payment refunded
+
+    InvPending --> InvPaid : PaymentCapturedEvent
+    InvPending --> InvFailed : Payment failed
+    InvPending --> InvCancelled : Invoice voided
+    InvPaid --> InvRefunded : Refund issued
+    InvFailed --> InvPending : Retry payment
+    InvFailed --> InvCancelled : Give up
+}
+
+note right of AwaitingPayment
+  All items PENDING:
+  - Subscription
+  - Token bundles
+  - Add-ons
+  Invoice status: pending
+end note
+
+note right of CheckoutComplete
+  PaymentCapturedEvent triggers:
+  - Subscription activated
+  - Tokens credited
+  - Add-ons activated
+end note
+
+note right of SubPending
+  Key Rule:
+  Subscription is NOT active
+  until payment confirmed
+end note
+
+note right of BundleCompleted
+  On completion:
+  - TokensCreditedEvent emitted
+  - User balance updated
+end note
+
+@enduml

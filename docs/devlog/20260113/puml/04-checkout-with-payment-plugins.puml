@@ -1,0 +1,141 @@
+@startuml checkout-with-payment-plugins
+!theme plain
+title Checkout Flow with Payment Provider Plugins (Payment-First)
+
+actor User
+participant "Frontend" as FE
+participant "CheckoutRoute" as Route
+participant "EventDispatcher" as Dispatcher
+participant "CheckoutHandler" as CheckoutH
+participant "PaymentService" as PS
+participant "PaymentProviderRegistry" as Registry
+participant "PaymentCapturedHandler" as PaymentH
+
+box "Payment Plugins" #LightBlue
+    participant "StripeProvider" as Stripe
+    participant "PayPalProvider" as PayPal
+    participant "ManualProvider" as Manual
+end box
+
+participant "External Gateway" as Gateway
+database "PostgreSQL" as DB
+
+== Step 1: Create Checkout (All PENDING) ==
+User -> FE: Select plan, add bundles/addons
+FE -> Route: POST /user/checkout\n{ plan_id, token_bundle_ids, add_on_ids }
+
+Route -> Dispatcher: emit(CheckoutRequestedEvent)
+Dispatcher -> CheckoutH: handle(event)
+
+note over CheckoutH #LightYellow
+  Creates ALL items as PENDING:
+  - Subscription (pending)
+  - Token purchases (pending)
+  - Add-on subscriptions (pending)
+  - Invoice with line items
+end note
+
+CheckoutH -> DB: INSERT subscription (pending)
+CheckoutH -> DB: INSERT token_purchases (pending)
+CheckoutH -> DB: INSERT invoice + line_items
+CheckoutH --> Dispatcher: EventResult.success()
+Dispatcher --> Route: result
+Route --> FE: { invoice, subscription(pending) }
+FE --> User: Show invoice\nSelect payment method
+
+== Step 2: Payment Processing ==
+
+alt Stripe Provider
+    User -> FE: Select Stripe
+    FE -> PS: create_intent(invoice_id, "stripe")
+    PS -> Registry: get("stripe")
+    Registry --> PS: StripeProvider
+    PS -> Stripe: create_payment_intent(amount)
+    Stripe -> Gateway: Stripe API
+    Gateway --> Stripe: { client_secret }
+    Stripe --> PS: PaymentIntent
+    PS --> FE: { client_secret }
+    FE --> User: Show Stripe form
+
+    User -> FE: Enter card details
+    FE -> Gateway: Stripe.js confirmPayment()
+    Gateway --> FE: { succeeded }
+
+    Gateway -> Route: Webhook: payment_intent.succeeded
+    Route -> PS: verify_webhook(payload, sig)
+    PS -> Stripe: verify_webhook()
+    Stripe --> PS: valid
+    PS -> Dispatcher: emit(PaymentCapturedEvent)
+
+else PayPal Provider
+    User -> FE: Select PayPal
+    FE -> PS: create_intent(invoice_id, "paypal")
+    PS -> Registry: get("paypal")
+    Registry --> PS: PayPalProvider
+    PS -> PayPal: create_order(amount)
+    PayPal -> Gateway: PayPal API
+    Gateway --> PayPal: { approval_url }
+    PayPal --> PS: PaymentIntent
+    PS --> FE: { approval_url }
+    FE --> User: Redirect to PayPal
+
+    User -> Gateway: Approve on PayPal
+    Gateway -> Route: Webhook: order.approved
+    Route -> PS: verify_webhook(payload)
+    PS -> PayPal: capture_order()
+    PayPal -> Gateway: Capture funds
+    Gateway --> PayPal: { completed }
+    PayPal --> PS: success
+    PS -> Dispatcher: emit(PaymentCapturedEvent)
+
+else Manual Provider (Default)
+    User -> FE: Select Bank Transfer
+    FE --> User: Show invoice details\n& bank account info
+
+    note over User, Manual
+      **Manual Flow:**
+      1. User makes bank transfer
+      2. Admin receives notification
+      3. Admin marks invoice paid
+      4. PaymentCapturedEvent emitted
+    end note
+
+    User -> Gateway: Bank transfer
+    Gateway -> Gateway: Admin notified
+    Gateway -> Route: Admin: POST /admin/invoices/:id/mark-paid
+    Route -> Dispatcher: emit(PaymentCapturedEvent)
+end
+
+== Step 3: Activate Everything ==
+Dispatcher -> PaymentH: handle(PaymentCapturedEvent)
+
+note over PaymentH #LightGreen
+  Activates ALL items:
+  1. Mark invoice PAID
+  2. Subscription -> ACTIVE
+  3. Credit tokens to balance
+  4. Add-ons -> ACTIVE
+end note
+
+PaymentH -> DB: UPDATE invoice status=paid
+PaymentH -> DB: UPDATE subscription status=active
+PaymentH -> DB: UPDATE user_token_balance
+PaymentH -> DB: UPDATE addon_subscriptions status=active
+
+PaymentH -> Dispatcher: emit("subscription:activated")
+PaymentH -> Dispatcher: emit("tokens:credited")
+PaymentH --> Dispatcher: EventResult.success()
+
+note right of Dispatcher
+  Side effects:
+  - Send receipt email
+  - Trigger webhooks
+  - Update analytics
+end note
+
+== Step 4: User Sees Active Status ==
+FE -> Route: GET /user/subscription
+Route --> FE: { subscription: active, token_balance: 1000 }
+FE --> User: Subscription ACTIVE\nTokens: 1000
+
+@enduml
