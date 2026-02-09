@@ -225,7 +225,7 @@ partition "Multiple Listeners React" {
 :See success message;
 stop
 
-note bottom
+floating note left
     **Event Summary:**
 
     **Frontend Events (5 total):**

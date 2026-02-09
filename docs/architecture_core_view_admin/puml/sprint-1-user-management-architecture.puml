@@ -105,9 +105,9 @@ package "User Management Plugin" {
     }
 
     package "Types" {
-        [User.ts] as Types
+        component "UserTypes" as TypesDef
 
-        note right of Types
+        note right of TypesDef
             Domain models:
             - User
             - UserStatus
@@ -127,9 +127,9 @@ DetailsComp ..> Store : uses
 Store --> IUserSvc : injected via\nsetUserService()
 UserSvcImpl --> ApiClient : injected via\nconstructor
 
-UserSvcImpl ..> Types : uses
-Store ..> Types : uses
-ListComp ..> Types : uses
+UserSvcImpl ..> TypesDef : uses
+Store ..> TypesDef : uses
+ListComp ..> TypesDef : uses
 
 ' Backend
 package "Backend API" #FFEBEE {

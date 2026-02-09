@@ -282,7 +282,7 @@ else (invalid dates)
     stop
 endif
 
-note bottom
+floating note left
     **SOLID Principles in Metrics Calculation:**
 
     **SRP - Single Responsibility:**
@@ -310,7 +310,7 @@ note bottom
     - Type-safe interfaces
 end note
 
-note right of Backend
+floating note right
     **Database Performance:**
 
     **Optimization Strategies:**
@@ -332,7 +332,7 @@ note right of Backend
     - Concurrent query execution
 end note
 
-note right of analyticsStore
+floating note right
     **Testing with TDD:**
 
     ```typescript

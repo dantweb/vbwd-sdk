@@ -78,11 +78,11 @@ partition "Webhook Processing" {
             :Update payment record;
             :Update subscription status;
             :Send confirmation email;
-        else (subscription.cancelled)
+        elseif (subscription.cancelled) then
             :Update subscription status;
             :Calculate refund if needed;
             :Send cancellation email;
-        else (invoice.paid)
+        elseif (invoice.paid) then
             :Mark invoice as paid;
             :Generate receipt;
             :Send receipt email;
@@ -150,41 +150,29 @@ partition "Webhook Processing" {
     endif
 }
 
-note bottom
-    **Admin Monitoring & Retry:**
+floating note left
+    **Admin Monitoring and Retry:**
 
-    |Admin|
-    :Open Webhook Log;
+    1. Admin opens Webhook Log
+    2. WebhookLogView displays failed webhooks
+    3. Admin clicks "Retry" on failed webhook
+    4. webhookStore.retryWebhook(webhookId)
+    5. WebhookService: POST /api/v1/admin/webhooks/:id/retry
+    6. Backend: Load webhook_log record
+    7. Backend: Increment retry_count
+    8. Backend: Update status = 'retrying'
+    9. Backend: Re-process webhook event
 
-    |WebhookLogView|
-    :Display failed webhooks;
+    **If retry successful:**
+    - status = 'delivered'
+    - Clear next_retry_at
 
-    |Admin|
-    :Click "Retry" on failed webhook;
+    **If failed again:**
+    - status = 'failed'
+    - Schedule next retry
 
-    |webhookStore|
-    :retryWebhook(webhookId);
-
-    |WebhookService|
-    :POST /api/v1/admin/webhooks/:id/retry;
-
-    |Backend|
-    :Load webhook_log record;
-    :Increment retry_count;
-    :Update status = 'retrying';
-    :Re-process webhook event;
-
-    if (Retry successful?) then (yes)
-        :status = 'delivered';
-        :Clear next_retry_at;
-    else (failed again)
-        :status = 'failed';
-        :Schedule next retry;
-    endif
-
-    |WebhookLogView|
-    :Update status badge;
-    :Show retry count;
+    10. WebhookLogView: Update status badge
+    11. WebhookLogView: Show retry count
 end note
 
 note right
@@ -248,7 +236,7 @@ note left
     - Export webhook logs
 end note
 
-note right of Backend
+floating note right
     **Database Schema:**
 
     ```sql

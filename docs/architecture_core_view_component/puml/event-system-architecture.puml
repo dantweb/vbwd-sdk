@@ -172,7 +172,7 @@ package "Frontend (Vue.js Applications)" {
         }
 
         package "Event Types" {
-            component "events.ts" as Events
+            component "EventTypes" as Events
 
             note right of Events
                 **Centralized Event Types:**
@@ -222,7 +222,7 @@ package "Backend API (Flask)" #FFEBEE {
     component "Flask Routes" as Routes
     component "Event Dispatcher" as Dispatcher
     component "Event Handlers" as Handlers
-    component "Services & Factories" as Services
+    component "Services and Factories" as Services
 }
 
 ' Frontend connections

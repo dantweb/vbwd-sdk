@@ -152,7 +152,7 @@ else (yes)
     endif
 endif
 
-note bottom
+floating note left
     **SOLID Principles Demonstrated:**
 
     **SRP - Single Responsibility:**
@@ -183,7 +183,7 @@ note bottom
     - Descriptive errors
 end note
 
-note right of PlanService
+floating note right
     **TDD Example - createPlan():**
 
     // RED: Write test first

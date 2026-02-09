@@ -60,10 +60,10 @@ package "Plan Management Plugin" {
         note right of Store
             **State:**
             - plans: TariffPlan[]
-            - selectedPlan: TariffPlan | null
+            - selectedPlan: TariffPlan or null
             - loading: boolean
-            - error: string | null
-            - planService: IPlanService | null
+            - error: string or null
+            - planService: IPlanService or null
 
             **DI via Setter:**
             setPlanService(service: IPlanService)
@@ -83,12 +83,12 @@ package "Plan Management Plugin" {
             **LSP - Liskov Substitution**
             Interface defines contract:
 
-            + getPlans(params): Promise<PaginatedResponse>
-            + getPlanById(id): Promise<TariffPlan>
-            + createPlan(data): Promise<TariffPlan>
-            + updatePlan(id, data): Promise<TariffPlan>
-            + updatePlanStatus(id, status): Promise<TariffPlan>
-            + syncPlanWithProvider(id, provider): Promise<TariffPlan>
+            + getPlans(params): Promise~<PaginatedResponse>
+            + getPlanById(id): Promise~<TariffPlan>
+            + createPlan(data): Promise~<TariffPlan>
+            + updatePlan(id, data): Promise~<TariffPlan>
+            + updatePlanStatus(id, status): Promise~<TariffPlan>
+            + syncPlanWithProvider(id, provider): Promise~<TariffPlan>
 
             Any implementation must fulfill
             this contract
@@ -111,11 +111,11 @@ package "Plan Management Plugin" {
     }
 
     package "Types" #FFFDE7 {
-        component "TariffPlan.ts" as Types
-        component "Pricing.ts"
-        component "PlanFeature.ts"
+        component "TariffPlan" as TypesDef
+        component "Pricing"
+        component "PlanFeature"
 
-        note right of Types
+        note right of TypesDef
             Domain Models:
             - TariffPlan
             - PlanType
@@ -136,9 +136,9 @@ package "Core SDK" #E1F5FE {
     note right of ApiClient
         **Shared Dependency**
         Provides:
-        - get<T>(url, config)
-        - post<T>(url, data, config)
-        - put<T>(url, data, config)
+        - get~<T>(url, config)
+        - post~<T>(url, data, config)
+        - put~<T>(url, data, config)
         - delete(url, config)
 
         Handles:
@@ -181,10 +181,10 @@ ServiceImpl --> ApiClient : injected\napiClient
 ApiClient --> API : HTTP/HTTPS
 
 ' Type dependencies
-ServiceImpl ..> Types : uses
-Store ..> Types : uses
-ListComp ..> Types : uses
-EditorComp ..> Types : uses
+ServiceImpl ..> TypesDef : uses
+Store ..> TypesDef : uses
+ListComp ..> TypesDef : uses
+EditorComp ..> TypesDef : uses
 
 note bottom
     **Dependency Injection Flow:**

@@ -232,7 +232,7 @@ else (not paid)
     stop
 endif
 
-note bottom
+floating note left
     **Service Architecture (DI):**
 
     ```typescript
@@ -275,7 +275,7 @@ note bottom
     - Single responsibility per function
 end note
 
-note right of InvoiceService
+floating note right
     **TDD Process:**
 
     **1. RED - Write failing test:**

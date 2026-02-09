@@ -47,16 +47,16 @@ package "Analytics Dashboard Plugin" {
     }
 
     package "Store" #FFF3E0 {
-        component "analyticsStore" as Store
+        component "analyticsStore" as StoreDef
 
-        note right of Store
+        note right of StoreDef
             **State:**
-            - overview: AnalyticsOverview | null
-            - revenueMetrics: RevenueMetrics | null
-            - revenueTimeSeries: RevenueTimeSeries | null
-            - subscriptionMetrics: SubscriptionMetrics | null
+            - overview: AnalyticsOverview or null
+            - revenueMetrics: RevenueMetrics or null
+            - revenueTimeSeries: RevenueTimeSeries or null
+            - subscriptionMetrics: SubscriptionMetrics or null
             - loading: boolean
-            - error: string | null
+            - error: string or null
             - dateRange: { startDate, endDate }
 
             **Getters (Computed):**
@@ -65,7 +65,7 @@ package "Analytics Dashboard Plugin" {
             - userGrowth: Calculate user growth %
 
             **DI:**
-            - analyticsService: IAnalyticsService | null
+            - analyticsService: IAnalyticsService or null
         end note
     }
 
@@ -75,13 +75,13 @@ package "Analytics Dashboard Plugin" {
 
         note right of IService
             **LSP - Interface Contract:**
-            + getOverview(params): Promise<AnalyticsOverview>
-            + getRevenueMetrics(params): Promise<RevenueMetrics>
-            + getRevenueTimeSeries(params): Promise<RevenueTimeSeries>
-            + getSubscriptionMetrics(params): Promise<SubscriptionMetrics>
-            + getUserMetrics(params): Promise<UserMetrics>
-            + getPaymentMetrics(params): Promise<PaymentMetrics>
-            + exportData(params, format): Promise<Blob>
+            + getOverview(params): Promise~<AnalyticsOverview>
+            + getRevenueMetrics(params): Promise~<RevenueMetrics>
+            + getRevenueTimeSeries(params): Promise~<RevenueTimeSeries>
+            + getSubscriptionMetrics(params): Promise~<SubscriptionMetrics>
+            + getUserMetrics(params): Promise~<UserMetrics>
+            + getPaymentMetrics(params): Promise~<PaymentMetrics>
+            + exportData(params, format): Promise~<Blob>
 
             Any implementation must provide all methods
         end note
@@ -93,7 +93,7 @@ package "Analytics Dashboard Plugin" {
             **Validation:**
             - validateDateRange(params)
             - Check date format
-            - Ensure start < end
+            - Ensure start before end
             - Limit to 2 years max
 
             **SRP:**
@@ -104,11 +104,11 @@ package "Analytics Dashboard Plugin" {
     }
 
     package "Types" #FFFDE7 {
-        component "Analytics.ts" as Types
-        component "Metrics.ts"
-        component "Chart.ts"
+        component "Analytics" as TypesDef
+        component "Metrics"
+        component "ChartTypes" as ChartType
 
-        note right of Types
+        note right of TypesDef
             Domain Models:
             - RevenueMetrics
             - SubscriptionMetrics
@@ -152,7 +152,7 @@ package "Backend API" #FFEBEE {
 }
 
 package "Chart.js Library" #E8EAF6 {
-    component "Chart.js" as ChartJS
+    component "ChartJS" as ChartJS
 
     note right of ChartJS
         Third-party charting library
@@ -171,14 +171,14 @@ Revenue ..> RevenueComp : uses
 Chart ..> ChartComp : uses
 
 ' Composable → Store
-DashComp ..> Store : uses
-RevenueComp ..> Store : uses
+DashComp ..> StoreDef : uses
+RevenueComp ..> StoreDef : uses
 
 ' Composable → Chart.js
 ChartComp ..> ChartJS : formats data for
 
 ' Store → Service
-Store --> IService : injected
+StoreDef --> IService : injected
 Service .up.|> IService
 
 ' Service → ApiClient
@@ -188,11 +188,11 @@ Service --> ApiClient : injected
 ApiClient --> API : HTTP/HTTPS
 
 ' Type usage
-Service ..> Types : uses
-Store ..> Types : uses
-ChartComp ..> Types : uses
+Service ..> TypesDef : uses
+StoreDef ..> TypesDef : uses
+ChartComp ..> TypesDef : uses
 
-note bottom
+note as DataFlowNote
     **Data Flow (Example: MRR Chart):**
 
     1. **User Action**:
@@ -228,7 +228,7 @@ note bottom
        → Chart.js renders line chart
 end note
 
-note top of Store
+note top of StoreDef
     **Computed Growth Calculation:**
 
     ```typescript

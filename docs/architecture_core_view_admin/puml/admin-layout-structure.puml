@@ -11,14 +11,14 @@ package "Router (/admin)" {
     [Forbidden View] as Forbidden
 
     package "Admin Layout" {
-        [AdminLayout.vue] as Layout
+        [AdminLayout] as Layout
 
         package "Topbar" {
-            [AdminTopbar.vue] as Topbar
+            [AdminTopbar] as TopbarComp
         }
 
         package "Sidebar" {
-            [AdminSidebar.vue] as Sidebar
+            [AdminSidebar] as SidebarComp
         }
 
         [router-view] as RouterView
@@ -29,16 +29,16 @@ App --> Login : /admin/login
 App --> Forbidden : /admin/forbidden
 App --> Layout : /admin/* (protected)
 
-Layout --> Topbar
-Layout --> Sidebar
+Layout --> TopbarComp
+Layout --> SidebarComp
 Layout --> RouterView
 
 package "Admin Views" {
-    [Dashboard.vue] as Dashboard
-    [Users/UserList.vue] as UserList
-    [Users/UserDetails.vue] as UserDetails
-    [Plans/PlanList.vue] as PlanList
-    [Analytics/Dashboard.vue] as Analytics
+    [Dashboard] as Dashboard
+    [UserList] as UserList
+    [UserDetails] as UserDetails
+    [PlanList] as PlanList
+    [AnalyticsDashboard] as Analytics
 }
 
 RouterView --> Dashboard : /admin/
@@ -55,13 +55,13 @@ note right of Layout
   ├────────┬───────────────────────┤
   │        │                       │
   │ Side-  │  Main Content         │
-  │ bar    │  <router-view />      │
+  │ bar    │  ~<router-view />     │
   │        │                       │
   │        │                       │
   └────────┴───────────────────────┘
 end note
 
-note bottom of Sidebar
+note bottom of SidebarComp
   Navigation items dynamically
   highlight based on current route.
 
@@ -72,7 +72,7 @@ note bottom of Sidebar
   etc.
 end note
 
-note left of Topbar
+note left of TopbarComp
   Topbar components:
   1. Branding/Title
   2. Global search
