@@ -34,3 +34,5 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+/vbwd-frontend/user/test-results/
+/vbwd-frontend/admin/vue/test-results/
