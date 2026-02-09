@@ -2,7 +2,7 @@
 
 ## Session Goal
 
-Route restructure (move auth routes under `/dashboard/`), add Landing1 and Checkout public plugins for the user app.
+Route restructure, public plugins, invoice navigation, read-only catalog detail pages.
 
 ## Previous Sessions Reviewed
 
@@ -17,6 +17,7 @@ Route restructure (move auth routes under `/dashboard/`), add Landing1 and Check
 |--------|----------|-------------|--------|
 | 15 | MEDIUM | Settings Payments tab cleanup — remove redundant tab + mock route | DONE |
 | 16 | HIGH | Route restructure + Landing1 & Checkout plugins | DONE |
+| 17 | HIGH | Invoice navigation + read-only catalog detail pages + backend public endpoints | DONE |
 
 ## Deliverables
 
@@ -24,6 +25,18 @@ Route restructure (move auth routes under `/dashboard/`), add Landing1 and Check
 |------|-------------|
 | **todo/** | |
 | `todo/sprint-16-route-restructure-landing-checkout-plugins.md` | Sprint 16 plan |
+| `todo/sprint-17-plan.md` | Sprint 17 plan |
 | **reports/** | |
 | `reports/sprint-15-settings-payments-cleanup.md` | Sprint 15 report |
 | `reports/sprint-16-route-restructure-landing-checkout-plugins.md` | Sprint 16 report |
+| `reports/sprint-17-invoice-navigation-catalog-detail-pages.md` | Sprint 17 report |
+
+## Test Summary
+
+| Suite | Tests | Status |
+|-------|-------|--------|
+| Core | 289 | passing |
+| User | 115 | passing |
+| Admin | 270 | passing |
+| Backend | 594 | passing |
+| **Total** | **1268** | **all green** |
