@@ -18,6 +18,7 @@ Separate admin and user frontend containers, bring user plugin system to parity 
 | 22 | HIGH | Separate admin and user into independent containers with own Dockerfiles and ports | DONE |
 | 22b | HIGH | User plugin config parity — config files, lifecycle hooks, conditional activation | DONE |
 | 23 | HIGH | User Plugins tab in admin settings — secure Node.js API on user container for plugin management | DONE |
+| 24 | HIGH | Stripe Payment Plugin — backend + frontend with shared payment abstractions | DONE |
 
 ## Deliverables
 
