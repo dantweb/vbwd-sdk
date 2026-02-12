@@ -18,7 +18,9 @@ Add PayPal payment processing as a plugin, mirroring the Stripe plugin architect
 |--------|----------|-------------|--------|
 | 25a | CRITICAL | Frontend static analysis & test fixes — 0 ESLint errors, 0 TS errors, 0 stderr warnings | DONE |
 | 25b | HIGH | Backend static analysis & dead code cleanup — 0 Black, 0 Flake8, 0 Mypy errors | DONE |
-| 25 | HIGH | PayPal Payment Plugin — backend + frontend mirroring Stripe architecture | TODO |
+| 25 | HIGH | PayPal Payment Plugin — backend + frontend mirroring Stripe architecture | DONE |
+| 25c | HIGH | Provider-agnostic refactoring — generic columns, merged repos, plugin-based refund | DONE |
+| 25d | MEDIUM | Test/Live credential switching — dual credential sets with mode toggle | DONE |
 
 ## Deliverables
 
@@ -27,21 +29,27 @@ Add PayPal payment processing as a plugin, mirroring the Stripe plugin architect
 | **done/** | |
 | `done/sprint-25a-frontend-static-analysis-fixes.md` | Sprint 25a plan |
 | `done/sprint-25b-backend-static-analysis-fixes.md` | Sprint 25b plan |
+| `done/sprint-25-paypal-payment-plugin.md` | Sprint 25 plan — PayPal plugin |
+| `done/sprint-25c-provider-agnostic-refactoring.md` | Sprint 25c plan — generic columns + refund |
+| `done/sprint-25d-test-live-credential-switching.md` | Sprint 25d plan — dual credential sets |
 | **reports/** | |
 | `reports/sprint-25a-frontend-static-analysis-fixes.md` | Sprint 25a report — i18n fixes, test router fixes, Pinia dedup, TS-ESLint v8 upgrade, Docker plugin mount |
 | `reports/sprint-25b-backend-static-analysis-fixes.md` | Sprint 25b report — Black, Flake8, Mypy fixes, dead code removal, bug fix |
-| **todo/** | |
-| `todo/sprint-25-paypal-payment-plugin.md` | Sprint 25 plan — PayPal plugin |
+| `reports/sprint-25-paypal-payment-plugin.md` | Sprint 25 report — PayPal plugin (backend + frontend, 77 new tests) |
+| `reports/sprint-25c-provider-agnostic-refactoring.md` | Sprint 25c report — generic columns, merged repos, plugin-based admin refund |
+| `reports/sprint-25d-test-live-credential-switching.md` | Sprint 25d report — test/live credential switching for Stripe + PayPal |
 
 ## Test Summary
 
 | Suite | Tests | Status |
 |-------|-------|--------|
-| Core | 289 | passing (3 pre-existing AuthGuard failures) |
-| User | 169 | passing |
+| Core | 300 | passing (1 skipped) |
+| User | 185 | passing (+16 PayPal) |
 | Admin | 331 | passing, 0 stderr warnings |
-| Backend | 737 | passing (4 skipped) |
-| **Total** | **1526** | **baseline** |
+| Backend unit | 661 | passing (4 skipped) |
+| Stripe plugin | 76 | passing |
+| PayPal plugin | 55 | passing (new) |
+| **Total** | **1608** | **+77 from Sprint 25** |
 
 ## Static Analysis
 
