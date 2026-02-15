@@ -1,0 +1,36 @@
+@startuml wave-collapse
+!theme plain
+title Wave Function Collapse in Token Sampling
+
+state "Superposition" as super {
+  state "All tokens exist\nsimultaneously" as all_tokens
+}
+
+state "Measurement" as measure {
+  state "Born Rule:\nP = |amplitude|^2" as born
+}
+
+state "Collapsed" as collapsed {
+  state "Single token\nselected" as single
+}
+
+[*] --> super : Context\nproduces logits
+super --> measure : Sample
+measure --> collapsed : Collapse
+collapsed --> super : Next position
+
+note right of measure
+  Irreversible process
+  Cannot reconstruct
+  superposition from
+  measurement result
+end note
+
+note left of super
+  Temperature controls:
+  T -> 0: Nearly collapsed
+  T ~ 1: Balanced
+  T -> inf: Max superposition
+end note
+
+@enduml

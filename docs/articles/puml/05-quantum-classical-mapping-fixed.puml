@@ -1,0 +1,55 @@
+@startuml mapping
+!theme plain
+title Quantum-Classical-Hardware Mapping
+
+package "Quantum Mechanics" {
+  [State Vector]
+  [Observable]
+  [Unitary Evolution]
+  [Measurement]
+  [Superposition]
+  [Entanglement]
+}
+
+package "Classical LLM" {
+  [Embedding]
+  [Output Layer]
+  [Transformer]
+  [Sampling]
+  [Probability Dist]
+  [Attention]
+}
+
+package "Quantum Hardware" {
+  [Qubit State]
+  [Measurement Op]
+  [Quantum Gates]
+  [Physical Measure]
+  [Native Superposition]
+  [True Entanglement]
+}
+
+[State Vector] -[#blue]-> [Embedding] : Analogy
+[State Vector] -[#red]-> [Qubit State] : Literal
+
+[Observable] -[#blue]-> [Output Layer] : Analogy
+[Observable] -[#red]-> [Measurement Op] : Literal
+
+[Unitary Evolution] -[#blue]-> [Transformer] : Analogy
+[Unitary Evolution] -[#red]-> [Quantum Gates] : Literal
+
+[Measurement] -[#blue]-> [Sampling] : Analogy
+[Measurement] -[#red]-> [Physical Measure] : Literal
+
+[Superposition] -[#blue]-> [Probability Dist] : Analogy
+[Superposition] -[#red]-> [Native Superposition] : Literal
+
+[Entanglement] -[#blue]-> [Attention] : Analogy
+[Entanglement] -[#red]-> [True Entanglement] : Literal
+
+legend
+  Blue = Mathematical analogy
+  Red = Physical implementation
+end legend
+
+@enduml

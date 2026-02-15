@@ -1,0 +1,230 @@
+@startuml software-architecture
+!theme plain
+title Quantum LLM Simulation Software Architecture
+
+' Package structure
+package "quantum_llm_sim" {
+
+    package "core" {
+        class Config {
+            +vocab_size: int
+            +embedding_dim: int
+            +temperature_default: float
+            +validate()
+        }
+    }
+
+    package "metrics" {
+        class EntropyCalculator {
+            +calculate_shannon_entropy(probs): float
+            +calculate_entropy_variance(samples): float
+            +entropy_at_temperature(logits, T): float
+        }
+
+        class SemanticSpreadCalculator {
+            +metric: str
+            +calculate_spread(embeddings): float
+            +calculate_spread_variance(samples): float
+        }
+
+        class UncertaintyPrincipleValidator {
+            +measure_at_temperature(T, n_samples): tuple
+            +run_multiple_trials(T, n_trials): dict
+        }
+
+        UncertaintyPrincipleValidator --> EntropyCalculator
+        UncertaintyPrincipleValidator --> SemanticSpreadCalculator
+    }
+
+    package "simulations" {
+        class QuantumState {
+            +amplitudes: np.ndarray
+            -_collapsed: bool
+            +norm(): float
+            +get_probabilities(): np.ndarray
+            +measure(): int
+            +is_collapsed(): bool
+            +entropy(): float
+            {static} +from_logits(logits, T): QuantumState
+        }
+
+        class CollapseSimulator {
+            +vocab_size: int
+            +run_measurements(logits, T, n): dict
+            +compare_temperatures(logits, temps): dict
+            +visualize_collapse(logits, T): dict
+        }
+
+        class PathGenerator {
+            +vocab_size: int
+            +max_length: int
+            +enumerate_all_paths(): list
+            +calculate_path_probability(path, prob_fn): float
+            +calculate_action(prob): float
+        }
+
+        class BeamSearch {
+            +beam_width: int
+            +vocab_size: int
+            +search(max_length, score_fn): list
+            +compare_to_exhaustive(path): dict
+        }
+
+        class PathIntegralSimulator {
+            +vocab_size: int
+            +max_length: int
+            +compute_classical_sum(prob_fn): float
+            +compute_quantum_amplitude(prob_fn, target): complex
+            +analyze_interference(prob_fn): dict
+            +compare_classical_quantum(prob_fn): dict
+        }
+
+        class EntanglementSimulator {
+            +dim: int
+            +create_bell_state(type): np.ndarray
+            +create_product_state(a, b): np.ndarray
+            +calculate_entanglement_entropy(state): float
+            +calculate_concurrence(state): float
+        }
+
+        class AttentionEntanglementMapper {
+            +num_heads: int
+            +attention_to_entanglement(attn_matrix): float
+            +multi_head_entanglement(attn_heads): np.ndarray
+            +compute_quantum_discord(attn_matrix): float
+        }
+
+        class BellInequalityTester {
+            +compute_chsh_parameter(corr_fn): float
+            +test_state(state): float
+            +test_attention_correlation(weight): float
+        }
+
+        CollapseSimulator --> QuantumState
+        PathIntegralSimulator --> PathGenerator
+        BellInequalityTester --> EntanglementSimulator
+    }
+
+    package "experiments" {
+        class ExperimentRunner {
+            +config: dict
+            +results: dict
+            +progress: dict
+            +run_all(): dict
+            +run_experiment(name): dict
+            +save_results(path)
+            -_run_uncertainty_principle(): dict
+            -_run_wave_collapse(): dict
+            -_run_path_integral(): dict
+            -_run_entanglement(): dict
+        }
+
+        class QuantumClassicalComparator {
+            +analyzer: StatisticalAnalyzer
+            +compare_performance(vocab, seq_len): dict
+            +compare_quality(n_samples, T): dict
+            +compare_uncertainty_bounds(temps): dict
+        }
+
+        ExperimentRunner --> UncertaintyPrincipleValidator
+        ExperimentRunner --> CollapseSimulator
+        ExperimentRunner --> PathIntegralSimulator
+        ExperimentRunner --> EntanglementSimulator
+        QuantumClassicalComparator --> UncertaintyPrincipleValidator
+    }
+
+    package "analysis" {
+        class StatisticalAnalyzer {
+            +confidence_interval(data, conf): tuple
+            +t_test(sample1, sample2): float
+            +cohens_d(sample1, sample2): float
+            +summarize(data): dict
+        }
+    }
+
+    package "visualization" {
+        class QuantumLLMVisualizer {
+            +style: str
+            +figure_dir: Path
+            +plot_uncertainty_principle(results)
+            +plot_wave_collapse(data)
+            +plot_path_integral(data)
+            +plot_entanglement(results)
+            +create_summary_figure(all_results)
+        }
+    }
+
+    package "reporting" {
+        class ReportGenerator {
+            +output_dir: Path
+            +generate_html_report(results, title): str
+            -_generate_overview_table(results): str
+            -_check_experiment_pass(results): bool
+        }
+    }
+
+    package "utils" {
+        class Logger {
+            {static} +get_logger(name): logging.Logger
+        }
+
+        class Seeds {
+            {static} +set_random_seed(seed)
+        }
+    }
+}
+
+' External dependencies
+package "External Libraries" {
+    class numpy
+    class scipy
+    class matplotlib
+    class pytest
+}
+
+' Dependencies
+ExperimentRunner ..> Config
+QuantumClassicalComparator ..> StatisticalAnalyzer
+ExperimentRunner ..> ReportGenerator
+ExperimentRunner ..> QuantumLLMVisualizer
+
+' Notes
+note right of quantum_llm_sim
+    **Core Design Principles**
+
+    1. **TDD**: All code has tests first
+    2. **Modularity**: Independent components
+    3. **Reproducibility**: Fixed seeds, configs
+    4. **Classical only**: No quantum hardware deps
+    5. **Standard library**: numpy/scipy only
+end note
+
+note bottom of simulations
+    **Quantum Simulations**
+
+    Each simulator models one quantum effect:
+    - QuantumState: Wave functions
+    - CollapseSimulator: Measurement
+    - PathIntegral: Feynman paths
+    - Entanglement: Correlations
+
+    All use classical computation
+    to simulate quantum behavior
+end note
+
+note bottom of experiments
+    **Experiment Framework**
+
+    ExperimentRunner:
+    - Orchestrates all experiments
+    - Configurable via YAML
+    - Reproducible results
+    - Progress tracking
+
+    Comparator:
+    - Classical vs Quantum analysis
+    - Statistical validation
+    - Performance metrics
+end note
+
+@enduml

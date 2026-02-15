@@ -1,0 +1,47 @@
+@startuml entanglement
+!theme plain
+title Entanglement in Attention
+
+rectangle "Token A" as ta
+rectangle "Token B" as tb
+
+rectangle "Product State" as prod {
+  note right: Independent tokens\nNo correlation
+}
+
+rectangle "Attention\nMechanism" as attn {
+  rectangle "Query-Key" as qk
+  rectangle "Softmax" as soft
+  rectangle "Value" as val
+
+  qk --> soft
+  soft --> val
+}
+
+rectangle "Entangled State" as ent {
+  note right: Non-separable\nCorrelated tokens
+}
+
+rectangle "Measures" as meas {
+  rectangle "Entropy" as entr
+  rectangle "Concurrence" as conc
+}
+
+ta --> prod
+tb --> prod
+
+prod --> attn
+attn --> ent
+
+ent --> meas
+
+note bottom of ent
+  Bell Inequality:
+  Classical: S <= 2
+  Quantum: S <= 2.828
+
+  Violation proves
+  genuine entanglement
+end note
+
+@enduml

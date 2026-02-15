@@ -1,0 +1,51 @@
+@startuml path-integral
+!theme plain
+title Path Integrals for Text Generation
+
+state "Initial State" as initial
+state "Final State" as final
+
+state "Path 1" as p1 {
+  state "Action: log P1" as a1
+  state "Amplitude: A1" as amp1
+}
+
+state "Path 2" as p2 {
+  state "Action: log P2" as a2
+  state "Amplitude: A2" as amp2
+}
+
+state "Path N" as pn {
+  state "Action: log PN" as an
+  state "Amplitude: AN" as ampn
+}
+
+state "Sum All Paths" as sum {
+  state "Total Amplitude =\nSum of all A_i" as total
+}
+
+state "Measure" as measure {
+  state "Probability =\n|Amplitude|^2" as prob
+}
+
+initial --> p1
+initial --> p2
+initial --> pn
+
+p1 --> sum
+p2 --> sum
+pn --> sum
+
+sum --> measure
+measure --> final
+
+note right of sum
+  Quantum: Sum ALL paths
+  Classical: Top K paths only
+
+  Interference:
+  - Constructive
+  - Destructive
+end note
+
+@enduml

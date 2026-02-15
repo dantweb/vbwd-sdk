@@ -1,0 +1,41 @@
+@startuml workflow
+!theme plain
+title Experiment Workflow
+
+start
+
+:Read Configuration;
+:Initialize Components;
+:Set Random Seed;
+
+fork
+  :Experiment 1:\nUncertainty Principle;
+fork again
+  :Experiment 2:\nWave Collapse;
+fork again
+  :Experiment 3:\nPath Integrals;
+fork again
+  :Experiment 4:\nEntanglement;
+end fork
+
+:Collect Results;
+
+fork
+  :Statistical Analysis;
+fork again
+  :Generate Figures;
+fork again
+  :Export Data;
+end fork
+
+:Generate Report;
+
+if (All Tests Pass?) then (yes)
+  :Success Report;
+else (no)
+  :Debug Report;
+endif
+
+stop
+
+@enduml

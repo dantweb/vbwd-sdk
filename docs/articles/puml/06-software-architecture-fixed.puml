@@ -1,0 +1,77 @@
+@startuml architecture
+!theme plain
+title Software Architecture
+
+package "quantum_llm_sim" {
+
+  package "metrics" {
+    class EntropyCalculator {
+      +calculate_shannon_entropy()
+      +calculate_entropy_variance()
+    }
+
+    class SemanticSpreadCalculator {
+      +calculate_spread()
+      +calculate_spread_variance()
+    }
+
+    class UncertaintyValidator {
+      +measure_at_temperature()
+      +run_multiple_trials()
+    }
+  }
+
+  package "simulations" {
+    class QuantumState {
+      +amplitudes
+      +measure()
+      +get_probabilities()
+    }
+
+    class CollapseSimulator {
+      +run_measurements()
+      +compare_temperatures()
+    }
+
+    class PathGenerator {
+      +enumerate_all_paths()
+      +calculate_action()
+    }
+
+    class EntanglementSimulator {
+      +create_bell_state()
+      +calculate_entropy()
+    }
+  }
+
+  package "experiments" {
+    class ExperimentRunner {
+      +run_all()
+      +run_experiment()
+      +save_results()
+    }
+
+    class Comparator {
+      +compare_performance()
+      +compare_quality()
+    }
+  }
+
+  package "visualization" {
+    class Visualizer {
+      +plot_uncertainty()
+      +plot_collapse()
+      +plot_entanglement()
+    }
+  }
+}
+
+UncertaintyValidator --> EntropyCalculator
+UncertaintyValidator --> SemanticSpreadCalculator
+CollapseSimulator --> QuantumState
+ExperimentRunner --> UncertaintyValidator
+ExperimentRunner --> CollapseSimulator
+ExperimentRunner --> EntanglementSimulator
+ExperimentRunner --> Visualizer
+
+@enduml

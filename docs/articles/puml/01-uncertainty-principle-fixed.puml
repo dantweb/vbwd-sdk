@@ -1,0 +1,33 @@
+@startuml uncertainty-principle
+!theme plain
+title Uncertainty Principle in LLMs
+
+rectangle "Temperature T" as temp
+rectangle "Softmax" as softmax
+rectangle "Entropy H" as entropy
+rectangle "Semantic Spread S" as spread
+rectangle "Product: DH x DS >= 0.5" as product
+
+temp --> softmax
+softmax --> entropy
+softmax --> spread
+entropy --> product
+spread --> product
+
+note right of product
+  Cannot minimize both:
+  - Low T: Low DH, High DS
+  - High T: High DH, Low DS
+
+  Analogous to:
+  Dx * Dp >= h/2
+end note
+
+legend
+  |= Quantum |= LLM |
+  | Position x | Entropy H |
+  | Momentum p | Spread S |
+  | Dx*Dp >= h/2 | DH*DS >= 1/2 |
+end legend
+
+@enduml

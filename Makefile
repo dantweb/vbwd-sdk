@@ -1,4 +1,14 @@
-.PHONY: up down up-build rebuild-admin logs ps clean
+.PHONY: up down up-build rebuild-backend rebuild-admin rebuild-user logs ps clean npm-install
+
+# Install npm dependencies for all frontend packages
+npm-install:
+	@echo "Installing npm dependencies..."
+	cd vbwd-frontend/core && npm install
+	cd vbwd-frontend/user && npm install
+	cd vbwd-frontend/admin/vue && npm install
+	@echo "Building core shared library..."
+	cd vbwd-frontend/core && npm run build
+	@echo "All npm dependencies installed and core library built"
 
 # Start all containers (backend + frontend)
 up:

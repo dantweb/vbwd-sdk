@@ -1,0 +1,78 @@
+@startuml circuit
+!theme plain
+title Quantum Circuit for Token Generation
+
+rectangle "Qubit Register" as qubits {
+  card "q0" as q0 {
+    :Token bit 0;
+  }
+  card "q1" as q1 {
+    :Token bit 1;
+  }
+  card "q2" as q2 {
+    :Token bit 2;
+  }
+}
+
+rectangle "Initialize" as init {
+  card "Hadamard Gates" as h {
+    :Create superposition;
+  }
+}
+
+rectangle "Context Encode" as context {
+  card "Amplitude Encoding" as amp {
+    :Rotation gates RY RZ;
+  }
+}
+
+rectangle "Quantum Attention" as attn {
+  card "CNOT Gates" as cnot {
+    :Entangle qubits;
+  }
+}
+
+rectangle "Feedforward" as ff {
+  card "Parametrized Circuits" as pqc {
+    :Trainable gates;
+  }
+}
+
+rectangle "Measure" as meas {
+  card "Born Rule" as born {
+    :Collapse state;
+  }
+}
+
+rectangle "Output" as out {
+  card "Classical Bits" as bits {
+    :Map to token index;
+  }
+}
+
+qubits --> init
+init --> context
+context --> attn
+attn --> ff
+ff --> meas
+meas --> out
+
+note bottom of out
+  Circuit Stages:
+  1. H gates -> superposition
+  2. RY/RZ -> encode context
+  3. CNOT -> attention
+  4. Parametrized -> feedforward
+  5. Measure -> output token
+end note
+
+note right of qubits
+  For vocab size V:
+  Need n = log2(V) qubits
+
+  Examples:
+  V=256 -> 8 qubits
+  V=1000 -> 10 qubits
+end note
+
+@enduml
