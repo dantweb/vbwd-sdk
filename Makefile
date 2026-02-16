@@ -19,7 +19,7 @@ up:
 
 # Start with rebuild
 rebuild-backend:
-	cd vbwd-backend && docker compose up -d --build
+	cd vbwd-backend && docker compose build --no-cache  && docker compose up -d
 	cd vbwd-frontend/user && docker compose build --no-cache && docker compose up -d 2>/dev/null || true
 	cd vbwd-frontend/admin && docker compose build --no-cache && docker compose up -d  2>/dev/null || true
 	@echo "All services rebuilt and started"
@@ -64,4 +64,4 @@ clean:
 	@echo "All services and volumes removed"
 
 migrations:
-    cd vbwd-backend && docker-compose exec api alembic upgrade head
+	cd vbwd-backend && docker-compose exec api alembic upgrade head
