@@ -85,8 +85,8 @@ jobs:
       - name: Run unit tests
         env:
           FLASK_ENV: testing
-          DATABASE_URL: sqlite:///:memory:
-          REDIS_URL: redis://localhost:6379/1
+          DATABASE_URL: 'sqlite:///:memory:'
+          REDIS_URL: 'redis://localhost:6379/1'
         run: pytest tests/unit/ -v --tb=short
 
   # ============================================
@@ -140,8 +140,8 @@ jobs:
       - name: Start API server
         env:
           FLASK_ENV: testing
-          DATABASE_URL: postgresql://vbwd:vbwd@localhost:5432/vbwd
-          REDIS_URL: redis://localhost:6379/1
+          DATABASE_URL: 'postgresql://vbwd:vbwd@localhost:5432/vbwd'
+          REDIS_URL: 'redis://localhost:6379/1'
           FLASK_SECRET_KEY: test-secret-key
           JWT_SECRET_KEY: test-jwt-secret
         run: |
@@ -197,8 +197,8 @@ jobs:
       - name: Run tests with coverage
         env:
           FLASK_ENV: testing
-          DATABASE_URL: sqlite:///:memory:
-          REDIS_URL: redis://localhost:6379/1
+          DATABASE_URL: 'sqlite:///:memory:'
+          REDIS_URL: 'redis://localhost:6379/1'
         run: pytest tests/unit/ --cov=src --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
