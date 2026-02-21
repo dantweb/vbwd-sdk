@@ -112,7 +112,7 @@ if [ -d "$BACKEND_DIR" ]; then
     git pull origin main || true
 else
     echo "Cloning vbwd-backend..."
-    git clone "$BACKEND_REPO" "$BACKEND_DIR"
+    git clone --branch main "$BACKEND_REPO" "$BACKEND_DIR"
     cd "$BACKEND_DIR"
 fi
 
