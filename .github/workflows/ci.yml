@@ -314,7 +314,7 @@ jobs:
         run: |
           echo "Waiting for backend API..."
           for i in {1..30}; do
-            if curl -sf http://localhost:5000/health > /dev/null; then
+            if curl -sf http://localhost:5000/api/v1/health > /dev/null; then
               echo "✓ Backend is ready"
               exit 0
             fi
@@ -354,7 +354,7 @@ jobs:
             });
 
             test('should connect to backend API', async ({ page, request }) => {
-              const response = await request.get('http://localhost:5000/health');
+              const response = await request.get('http://localhost:5000/api/v1/health');
               expect(response.ok()).toBeTruthy();
             });
 

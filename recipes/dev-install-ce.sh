@@ -291,7 +291,7 @@ echo "Waiting for services to start..."
 sleep 5
 
 # Check backend health
-if wait_for_service "Backend API" "http://localhost:5000/health" 60; then
+if wait_for_service "Backend API" "http://localhost:5000/api/v1/health" 60; then
     echo "Backend API is running on http://localhost:5000"
 else
     echo "ERROR: Backend API failed to start"
