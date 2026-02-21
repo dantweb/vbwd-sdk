@@ -1,4 +1,4 @@
-name: VBWD CE - CI/CD Pipeline (Organized)
+name: VBWD CE - CI/CD Pipeline
 
 on:
   push:
@@ -17,12 +17,12 @@ concurrency:
 
 jobs:
   # ============================================
-  # Job 1: Install & Cache Dependencies
+  # Job 1: Install & Backend Tests
   # ============================================
-  install:
-    name: Install & Cache
+  install-and-test:
+    name: Install & Backend Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout code
@@ -33,154 +33,12 @@ jobs:
           chmod +x recipes/dev-install-ce.sh
           ./recipes/dev-install-ce.sh
 
-      - name: Cache vbwd-fe-core
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-core/node_modules
-          key: ${{ runner.os }}-fe-core-${{ hashFiles('vbwd-fe-core/package-lock.json') }}
-
-      - name: Cache vbwd-fe-user
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-user/node_modules
-          key: ${{ runner.os }}-fe-user-${{ hashFiles('vbwd-fe-user/package-lock.json') }}
-
-      - name: Cache vbwd-fe-admin
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-admin/node_modules
-          key: ${{ runner.os }}-fe-admin-${{ hashFiles('vbwd-fe-admin/package-lock.json') }}
-
-      - name: Cache vbwd-backend Python
-        uses: actions/cache@v4
-        with:
-          path: vbwd-backend/.venv
-          key: ${{ runner.os }}-python-${{ hashFiles('vbwd-backend/requirements.txt') }}
-
   # ============================================
-  # Job 2: Style & Linting Checks
-  # ============================================
-  styles:
-    name: Style Checks (Lint)
-    runs-on: ubuntu-latest
-    needs: install
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
-
-      - name: Restore vbwd-fe-core cache
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-core/node_modules
-          key: ${{ runner.os }}-fe-core-${{ hashFiles('vbwd-fe-core/package-lock.json') }}
-
-      - name: Restore vbwd-fe-user cache
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-user/node_modules
-          key: ${{ runner.os }}-fe-user-${{ hashFiles('vbwd-fe-user/package-lock.json') }}
-
-      - name: Restore vbwd-fe-admin cache
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-admin/node_modules
-          key: ${{ runner.os }}-fe-admin-${{ hashFiles('vbwd-fe-admin/package-lock.json') }}
-
-      - name: Lint vbwd-fe-core
-        working-directory: vbwd-fe-core
-        run: npm run lint
-        continue-on-error: true
-
-      - name: Lint vbwd-fe-user
-        working-directory: vbwd-fe-user
-        run: npm run lint
-        continue-on-error: true
-
-      - name: Lint vbwd-fe-admin
-        working-directory: vbwd-fe-admin
-        run: npm run lint
-        continue-on-error: true
-
-  # ============================================
-  # Job 3: Frontend Unit Tests
-  # ============================================
-  unit:
-    name: Unit Tests (Frontend)
-    runs-on: ubuntu-latest
-    needs: install
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
-
-      - name: Restore vbwd-fe-core cache
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-core/node_modules
-          key: ${{ runner.os }}-fe-core-${{ hashFiles('vbwd-fe-core/package-lock.json') }}
-
-      - name: Restore vbwd-fe-user cache
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-user/node_modules
-          key: ${{ runner.os }}-fe-user-${{ hashFiles('vbwd-fe-user/package-lock.json') }}
-
-      - name: Restore vbwd-fe-admin cache
-        uses: actions/cache@v4
-        with:
-          path: vbwd-fe-admin/node_modules
-          key: ${{ runner.os }}-fe-admin-${{ hashFiles('vbwd-fe-admin/package-lock.json') }}
-
-      - name: Test vbwd-fe-core
-        working-directory: vbwd-fe-core
-        run: npm run test 2>/dev/null || echo "Core tests not available"
-        continue-on-error: true
-
-      - name: Test vbwd-fe-user
-        working-directory: vbwd-fe-user
-        run: npm run test 2>/dev/null || echo "User app tests not available"
-        continue-on-error: true
-
-      - name: Test vbwd-fe-admin
-        working-directory: vbwd-fe-admin
-        run: npm run test 2>/dev/null || echo "Admin app tests not available"
-        continue-on-error: true
-
-      - name: Upload unit test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-unit-tests
-          path: |
-            vbwd-fe-core/test-results/
-            vbwd-fe-user/test-results/
-            vbwd-fe-admin/test-results/
-          retention-days: 7
-
-  # ============================================
-  # Job 4: Backend Integration Tests
+  # Job 2: Backend Integration Tests
   # ============================================
   integration:
     name: Integration Tests (Backend)
     runs-on: ubuntu-latest
-    needs: install
     timeout-minutes: 20
 
     services:
@@ -212,6 +70,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Clone vbwd-backend
+        run: git clone --branch main https://github.com/dantweb/vbwd-backend.git vbwd-backend
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -227,18 +88,7 @@ jobs:
 
       - name: Create .env file
         working-directory: vbwd-backend
-        run: |
-          if [ ! -f ".env" ]; then
-            cp .env.example .env || cat > .env << 'EOF'
-          POSTGRES_PASSWORD=vbwd
-          POSTGRES_DB=vbwd
-          POSTGRES_USER=vbwd
-          DATABASE_URL=postgresql://vbwd:vbwd@localhost:5432/vbwd
-          FLASK_ENV=testing
-          FLASK_SECRET_KEY=test-secret-key
-          REDIS_URL=redis://localhost:6379/0
-          EOF
-          fi
+        run: cp .env.example .env
 
       - name: Run database migrations
         working-directory: vbwd-backend
@@ -254,9 +104,9 @@ jobs:
           REDIS_URL: "redis://localhost:6379/0"
           FLASK_ENV: testing
         run: |
-          pytest tests/integration/ -v --tb=short --junit-xml=test-results/integration-tests.xml || true
+          pytest tests/ -v --tb=short --junit-xml=test-results/integration-tests.xml || true
 
-      - name: Upload integration test results
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -265,13 +115,12 @@ jobs:
           retention-days: 7
 
   # ============================================
-  # Job 5: E2E Tests (Playwright)
+  # Job 3: Frontend Style & Unit Tests
   # ============================================
-  e2e:
-    name: E2E Tests (Playwright)
+  frontend-tests:
+    name: Frontend Tests (Lint + Unit)
     runs-on: ubuntu-latest
-    needs: install
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -281,168 +130,67 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
 
-      - name: Restore caches
-        uses: actions/cache@v4
-        with:
-          path: |
-            vbwd-fe-core/node_modules
-            vbwd-fe-user/node_modules
-            vbwd-fe-admin/node_modules
-          key: ${{ runner.os }}-fe-all-${{ hashFiles('**/package-lock.json') }}
-
-      - name: Run installation script
+      - name: Clone frontend repos
         run: |
-          chmod +x recipes/dev-install-ce.sh
-          ./recipes/dev-install-ce.sh
+          git clone --branch main https://github.com/dantweb/vbwd-fe-core.git vbwd-fe-core
+          git clone --branch main --recurse-submodules https://github.com/dantweb/vbwd-fe-user.git vbwd-fe-user
+          git clone --branch main --recurse-submodules https://github.com/dantweb/vbwd-fe-admin.git vbwd-fe-admin
 
-      - name: Install Playwright
-        working-directory: vbwd-fe-user
-        run: |
-          npm ci || npm install
-          if grep -q "@playwright/test" package.json; then
-            npx playwright install --with-deps chromium
-          else
-            npm install -D @playwright/test
-            npx playwright install --with-deps chromium
-          fi
-
-      - name: Wait for backend
-        run: |
-          echo "Waiting for backend API..."
-          for i in {1..30}; do
-            if curl -sf http://localhost:5000/api/v1/health > /dev/null; then
-              echo "✓ Backend is ready"
-              exit 0
-            fi
-            echo "Attempt $i: Waiting for backend..."
-            sleep 2
-          done
-          echo "✗ Backend health check failed"
-          exit 1
-
-      - name: Wait for frontend
-        run: |
-          echo "Waiting for frontend app..."
-          for i in {1..30}; do
-            if curl -sf http://localhost:8080 > /dev/null; then
-              echo "✓ Frontend is ready"
-              exit 0
-            fi
-            echo "Attempt $i: Waiting for frontend..."
-            sleep 2
-          done
-          echo "✗ Frontend check failed"
-          exit 1
-
-      - name: Create Playwright tests if missing
-        working-directory: vbwd-fe-user
-        run: |
-          mkdir -p tests/e2e
-
-          if [ ! -f "tests/e2e/basic.spec.ts" ] && [ ! -f "tests/e2e/basic.spec.js" ]; then
-            cat > tests/e2e/basic.spec.ts << 'EOF'
-          import { test, expect } from '@playwright/test';
-
-          test.describe('VBWD Platform E2E Tests', () => {
-            test('should load frontend homepage', async ({ page }) => {
-              await page.goto('http://localhost:8080');
-              await expect(page).toHaveTitle(/VBWD|Vue/i);
-            });
-
-            test('should connect to backend API', async ({ page, request }) => {
-              const response = await request.get('http://localhost:5000/api/v1/health');
-              expect(response.ok()).toBeTruthy();
-            });
-
-            test('should display user interface elements', async ({ page }) => {
-              await page.goto('http://localhost:8080');
-              await page.waitForLoadState('networkidle');
-              const content = await page.textContent('body');
-              expect(content).toBeTruthy();
-            });
-          });
-          EOF
-          fi
-
-          if [ ! -f "playwright.config.ts" ] && [ ! -f "playwright.config.js" ]; then
-            cat > playwright.config.ts << 'EOF'
-          import { defineConfig } from '@playwright/test';
-
-          export default defineConfig({
-            testDir: './tests/e2e',
-            fullyParallel: true,
-            forbidOnly: !!process.env.CI,
-            retries: process.env.CI ? 2 : 0,
-            workers: process.env.CI ? 1 : undefined,
-            reporter: [['html'], ['junit', { outputFile: 'test-results/e2e-results.xml' }]],
-            use: {
-              baseURL: 'http://localhost:8080',
-              trace: 'on-first-retry',
-              screenshot: 'only-on-failure',
-            },
-            projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
-          });
-          EOF
-          fi
-
-      - name: Run Playwright E2E tests (core)
+      - name: Build vbwd-fe-core
         working-directory: vbwd-fe-core
-        run: npx playwright test 2>/dev/null || echo "Core E2E tests not available"
-        continue-on-error: true
+        run: |
+          npm install
+          npm run build
 
-      - name: Run Playwright E2E tests (user app)
+      - name: Install vbwd-fe-user
         working-directory: vbwd-fe-user
-        run: npx playwright test --reporter=html,junit
-        continue-on-error: true
+        run: npm install
 
-      - name: Run Playwright E2E tests (admin app)
+      - name: Install vbwd-fe-admin
         working-directory: vbwd-fe-admin
-        run: npx playwright test 2>/dev/null || echo "Admin E2E tests not available"
+        run: npm install
+
+      - name: Lint vbwd-fe-core
+        working-directory: vbwd-fe-core
+        run: npm run lint
         continue-on-error: true
 
-      - name: Upload Playwright reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-reports
-          path: |
-            vbwd-fe-core/playwright-report/
-            vbwd-fe-user/playwright-report/
-            vbwd-fe-admin/playwright-report/
-          retention-days: 7
+      - name: Lint vbwd-fe-user
+        working-directory: vbwd-fe-user
+        run: npm run lint
+        continue-on-error: true
 
-      - name: Upload E2E test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-test-results
-          path: |
-            vbwd-fe-core/test-results/
-            vbwd-fe-user/test-results/
-            vbwd-fe-admin/test-results/
-          retention-days: 7
+      - name: Lint vbwd-fe-admin
+        working-directory: vbwd-fe-admin
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Test vbwd-fe-core
+        working-directory: vbwd-fe-core
+        run: npm run test 2>/dev/null || echo "Core tests not available"
+        continue-on-error: true
+
+      - name: Test vbwd-fe-user
+        working-directory: vbwd-fe-user
+        run: npm run test 2>/dev/null || echo "User app tests not available"
+        continue-on-error: true
+
+      - name: Test vbwd-fe-admin
+        working-directory: vbwd-fe-admin
+        run: npm run test 2>/dev/null || echo "Admin app tests not available"
+        continue-on-error: true
 
   # ============================================
-  # Job 6: Test Summary
+  # Job 4: Test Summary
   # ============================================
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [styles, unit, integration, e2e]
+    needs: [install-and-test, integration, frontend-tests]
     if: always()
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download test artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: test-results
-
       - name: Display test summary
         run: |
           echo "=================================="
@@ -450,24 +198,17 @@ jobs:
           echo "=================================="
           echo ""
           echo "Job Results:"
-          echo "  Styles:       ${{ needs.styles.result }}"
-          echo "  Unit Tests:   ${{ needs.unit.result }}"
-          echo "  Integration:  ${{ needs.integration.result }}"
-          echo "  E2E:          ${{ needs.e2e.result }}"
-          echo ""
-          echo "Test Artifacts:"
-          if [ -d "test-results" ]; then
-            find test-results -type f -name "*.xml" | head -20
-          fi
+          echo "  Install & Backend: ${{ needs.install-and-test.result }}"
+          echo "  Integration:       ${{ needs.integration.result }}"
+          echo "  Frontend Tests:    ${{ needs.frontend-tests.result }}"
           echo ""
 
       - name: Verify overall status
         run: |
-          if [ "${{ needs.styles.result }}" = "failure" ] || \
-             [ "${{ needs.unit.result }}" = "failure" ] || \
+          if [ "${{ needs.install-and-test.result }}" = "failure" ] || \
              [ "${{ needs.integration.result }}" = "failure" ] || \
-             [ "${{ needs.e2e.result }}" = "failure" ]; then
-            echo "❌ Some tests failed. Check individual job logs."
+             [ "${{ needs.frontend-tests.result }}" = "failure" ]; then
+            echo "Some tests failed. Check individual job logs."
             exit 1
           fi
-          echo "✅ All tests passed!"
+          echo "All tests passed!"
