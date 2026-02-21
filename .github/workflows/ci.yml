@@ -17,10 +17,10 @@ concurrency:
 
 jobs:
   # ============================================
-  # Job 1: Install & Backend Tests
+  # Job 1: Install everything (backend + frontend)
   # ============================================
-  install-and-test:
-    name: Install & Backend Tests
+  install:
+    name: Install & Build
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -34,11 +34,12 @@ jobs:
           ./recipes/dev-install-ce.sh
 
   # ============================================
-  # Job 2: Backend Integration Tests
+  # Job 2: Backend Integration Tests (after install)
   # ============================================
-  integration:
-    name: Integration Tests (Backend)
+  backend-tests:
+    name: Backend Tests
     runs-on: ubuntu-latest
+    needs: install
     timeout-minutes: 20
 
     services:
@@ -95,31 +96,40 @@ jobs:
         env:
           DATABASE_URL: "postgresql://vbwd:vbwd@localhost:5432/vbwd"
           FLASK_ENV: testing
-        run: flask db upgrade || true
+        run: flask db upgrade
 
-      - name: Run integration tests
+      - name: Populate database (Taro plugin seed)
         working-directory: vbwd-backend
         env:
           DATABASE_URL: "postgresql://vbwd:vbwd@localhost:5432/vbwd"
           REDIS_URL: "redis://localhost:6379/0"
           FLASK_ENV: testing
         run: |
-          pytest tests/ -v --tb=short --junit-xml=test-results/integration-tests.xml || true
+          TEST_DATA_SEED=true flask seed-test-data || echo "Seed command not available, skipping"
+
+      - name: Run backend tests
+        working-directory: vbwd-backend
+        env:
+          DATABASE_URL: "postgresql://vbwd:vbwd@localhost:5432/vbwd"
+          REDIS_URL: "redis://localhost:6379/0"
+          FLASK_ENV: testing
+        run: pytest tests/ -v --tb=short --junit-xml=test-results/backend-tests.xml
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-test-results
+          name: backend-test-results
           path: vbwd-backend/test-results/
           retention-days: 7
 
   # ============================================
-  # Job 3: Frontend Style & Unit Tests
+  # Job 3: Frontend Tests (after backend tests)
   # ============================================
   frontend-tests:
     name: Frontend Tests (Lint + Unit)
     runs-on: ubuntu-latest
+    needs: backend-tests
     timeout-minutes: 15
 
     steps:
@@ -182,12 +192,94 @@ jobs:
         continue-on-error: true
 
   # ============================================
-  # Job 4: Test Summary
+  # Job 4: E2E Tests (Playwright) - after frontend tests
+  # ============================================
+  e2e-tests:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: frontend-tests
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Clone all repos
+        run: |
+          git clone --branch main https://github.com/dantweb/vbwd-backend.git vbwd-backend
+          git clone --branch main https://github.com/dantweb/vbwd-fe-core.git vbwd-fe-core
+          git clone --branch main --recurse-submodules https://github.com/dantweb/vbwd-fe-user.git vbwd-fe-user
+
+      - name: Start backend with Docker Compose
+        working-directory: vbwd-backend
+        run: |
+          cp .env.example .env
+          docker compose up -d --build
+          echo "Waiting for backend..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:5000/api/v1/health > /dev/null; then
+              echo "Backend is ready"
+              break
+            fi
+            echo "Attempt $i: waiting..."
+            sleep 2
+          done
+          curl -sf http://localhost:5000/api/v1/health || (docker compose logs api && exit 1)
+
+      - name: Run database migrations and seed data
+        working-directory: vbwd-backend
+        run: |
+          docker compose exec -T api flask db upgrade
+          docker compose exec -T -e TEST_DATA_SEED=true api flask seed-test-data || echo "Seed not available"
+
+      - name: Build vbwd-fe-core
+        working-directory: vbwd-fe-core
+        run: |
+          npm install
+          npm run build
+
+      - name: Install vbwd-fe-user
+        working-directory: vbwd-fe-user
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: vbwd-fe-user
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E tests (user app)
+        working-directory: vbwd-fe-user
+        env:
+          VITE_BACKEND_URL: http://localhost:5000
+        run: npx playwright test --reporter=list,junit --output=test-results/
+        continue-on-error: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            vbwd-fe-user/playwright-report/
+            vbwd-fe-user/test-results/
+          retention-days: 7
+
+      - name: Stop backend
+        if: always()
+        working-directory: vbwd-backend
+        run: docker compose down -v
+
+  # ============================================
+  # Job 5: Test Summary
   # ============================================
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [install-and-test, integration, frontend-tests]
+    needs: [install, backend-tests, frontend-tests, e2e-tests]
     if: always()
 
     steps:
@@ -198,16 +290,18 @@ jobs:
           echo "=================================="
           echo ""
           echo "Job Results:"
-          echo "  Install & Backend: ${{ needs.install-and-test.result }}"
-          echo "  Integration:       ${{ needs.integration.result }}"
+          echo "  Install & Build:   ${{ needs.install.result }}"
+          echo "  Backend Tests:     ${{ needs.backend-tests.result }}"
           echo "  Frontend Tests:    ${{ needs.frontend-tests.result }}"
+          echo "  E2E Tests:         ${{ needs.e2e-tests.result }}"
           echo ""
 
       - name: Verify overall status
         run: |
-          if [ "${{ needs.install-and-test.result }}" = "failure" ] || \
-             [ "${{ needs.integration.result }}" = "failure" ] || \
-             [ "${{ needs.frontend-tests.result }}" = "failure" ]; then
+          if [ "${{ needs.install.result }}" = "failure" ] || \
+             [ "${{ needs.backend-tests.result }}" = "failure" ] || \
+             [ "${{ needs.frontend-tests.result }}" = "failure" ] || \
+             [ "${{ needs.e2e-tests.result }}" = "failure" ]; then
             echo "Some tests failed. Check individual job logs."
             exit 1
           fi
