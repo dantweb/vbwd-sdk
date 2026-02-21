@@ -179,7 +179,7 @@ fi
 echo "Building vbwd-fe-core..."
 if command_exists docker compose || command_exists docker; then
     cd "$FE_CORE_DIR"
-    if [ -f "docker compose.yaml" ] || [ -f "docker compose.yml" ]; then
+    if [ -f "docker-compose.yaml" ] || [ -f "docker-compose.yml" ]; then
         # Use Docker Compose if available
         docker compose run --rm build npm install && npm run build || true
     else
