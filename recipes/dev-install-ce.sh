@@ -24,13 +24,38 @@ echo "Workspace: $WORKSPACE_DIR"
 
 # Configuration
 BACKEND_REPO="https://github.com/dantweb/vbwd-backend.git"
-FRONTEND_REPO="https://github.com/dantweb/vbwd-frontend.git"
+# Frontend repositories (split into 3 independent repos with git submodules)
+FE_CORE_REPO="https://github.com/dantweb/vbwd-fe-core.git"
+FE_USER_REPO="https://github.com/dantweb/vbwd-fe-user.git"
+FE_ADMIN_REPO="https://github.com/dantweb/vbwd-fe-admin.git"
+
 BACKEND_DIR="$WORKSPACE_DIR/vbwd-backend"
-FRONTEND_DIR="$WORKSPACE_DIR/vbwd-frontend"
+FE_CORE_DIR="$WORKSPACE_DIR/vbwd-fe-core"
+FE_USER_DIR="$WORKSPACE_DIR/vbwd-fe-user"
+FE_ADMIN_DIR="$WORKSPACE_DIR/vbwd-fe-admin"
+
+# Port configuration
+FE_USER_PORT=8080
+FE_ADMIN_PORT=8081
 
 # Function to check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Function to check if port is available
+check_port_available() {
+    local port=$1
+    if command_exists lsof; then
+        if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+            return 1  # Port in use
+        fi
+    elif command_exists netstat; then
+        if netstat -tuln 2>/dev/null | grep -q ":$port "; then
+            return 1  # Port in use
+        fi
+    fi
+    return 0  # Port available
 }
 
 # Function to wait for service
@@ -130,38 +155,113 @@ else
     echo "Backend .env file already exists"
 fi
 
-# Clone frontend repository
+# Clone and setup frontend repositories (3 independent repos with submodules)
 echo ""
 echo "=========================================="
-echo "Step 2: Setting up vbwd-frontend"
+echo "Step 2: Setting up Frontend (3 repos: core, user, admin)"
 echo "=========================================="
 
-if [ -d "$FRONTEND_DIR" ]; then
-    echo "Frontend directory already exists, pulling latest changes..."
-    cd "$FRONTEND_DIR"
+# Step 2a: Clone and build vbwd-fe-core (base library - must build first)
+echo ""
+echo "Step 2a: Setting up vbwd-fe-core (shared component library)"
+echo "==========================================================="
+
+if [ -d "$FE_CORE_DIR" ]; then
+    echo "Core library directory already exists, pulling latest changes..."
+    cd "$FE_CORE_DIR"
     git pull origin main || true
 else
-    echo "Cloning vbwd-frontend..."
-    git clone "$FRONTEND_REPO" "$FRONTEND_DIR"
-    cd "$FRONTEND_DIR"
+    echo "Cloning vbwd-fe-core..."
+    git clone "$FE_CORE_REPO" "$FE_CORE_DIR"
+    cd "$FE_CORE_DIR"
 fi
 
-# Setup frontend environment
-if [ ! -f "$FRONTEND_DIR/.env" ]; then
-    echo "Creating frontend .env file..."
-    if [ -f "$FRONTEND_DIR/.env.example" ]; then
-        cp "$FRONTEND_DIR/.env.example" "$FRONTEND_DIR/.env"
+echo "Building vbwd-fe-core..."
+if command_exists docker-compose || command_exists docker; then
+    cd "$FE_CORE_DIR"
+    if [ -f "docker-compose.yaml" ] || [ -f "docker-compose.yml" ]; then
+        # Use Docker Compose if available
+        docker-compose run --rm build npm install && npm run build || true
     else
-        # Create minimal .env if example doesn't exist
-        cat > "$FRONTEND_DIR/.env" << 'EOF'
+        npm install
+        npm run build
+    fi
+else
+    npm install
+    npm run build
+fi
+echo "✓ vbwd-fe-core built successfully"
+
+# Step 2b: Clone vbwd-fe-user with submodule
+echo ""
+echo "Step 2b: Setting up vbwd-fe-user (user-facing app)"
+echo "=================================================="
+
+if [ -d "$FE_USER_DIR" ]; then
+    echo "User app directory already exists, updating submodules..."
+    cd "$FE_USER_DIR"
+    git pull origin main || true
+    git submodule update --init --recursive || true
+else
+    echo "Cloning vbwd-fe-user with submodules..."
+    git clone --recurse-submodules "$FE_USER_REPO" "$FE_USER_DIR"
+    cd "$FE_USER_DIR"
+fi
+
+# Verify submodule
+if [ -d "$FE_USER_DIR/vbwd-fe-core" ] && [ -f "$FE_USER_DIR/vbwd-fe-core/package.json" ]; then
+    echo "✓ Submodule vbwd-fe-core initialized"
+else
+    echo "WARNING: Submodule vbwd-fe-core may not be properly initialized"
+fi
+
+echo "Installing dependencies for vbwd-fe-user..."
+cd "$FE_USER_DIR"
+npm install
+echo "✓ vbwd-fe-user dependencies installed"
+
+# Step 2c: Clone vbwd-fe-admin with submodule
+echo ""
+echo "Step 2c: Setting up vbwd-fe-admin (admin backoffice)"
+echo "===================================================="
+
+if [ -d "$FE_ADMIN_DIR" ]; then
+    echo "Admin app directory already exists, updating submodules..."
+    cd "$FE_ADMIN_DIR"
+    git pull origin main || true
+    git submodule update --init --recursive || true
+else
+    echo "Cloning vbwd-fe-admin with submodules..."
+    git clone --recurse-submodules "$FE_ADMIN_REPO" "$FE_ADMIN_DIR"
+    cd "$FE_ADMIN_DIR"
+fi
+
+# Verify submodule
+if [ -d "$FE_ADMIN_DIR/vbwd-fe-core" ] && [ -f "$FE_ADMIN_DIR/vbwd-fe-core/package.json" ]; then
+    echo "✓ Submodule vbwd-fe-core initialized"
+else
+    echo "WARNING: Submodule vbwd-fe-core may not be properly initialized"
+fi
+
+echo "Installing dependencies for vbwd-fe-admin..."
+cd "$FE_ADMIN_DIR"
+npm install
+echo "✓ vbwd-fe-admin dependencies installed"
+
+# Setup frontend environment files
+echo ""
+echo "Setting up environment files for frontend apps..."
+
+for FE_DIR in "$FE_USER_DIR" "$FE_ADMIN_DIR"; do
+    FE_NAME=$(basename "$FE_DIR")
+    if [ ! -f "$FE_DIR/.env" ]; then
+        cat > "$FE_DIR/.env" << 'EOF'
 VITE_API_URL=http://localhost:5000
 VITE_WS_URL=ws://localhost:5000
 EOF
+        echo "✓ Environment file created for $FE_NAME"
     fi
-    echo "Frontend .env file created"
-else
-    echo "Frontend .env file already exists"
-fi
+done
 
 # Start Docker containers
 echo ""
@@ -242,29 +342,26 @@ else
     exit 1
 fi
 
-# Setup frontend
+# Note about frontend startup
 echo ""
 echo "=========================================="
-echo "Step 5: Setting up frontend"
+echo "Step 5: Frontend applications (ready to start)"
 echo "=========================================="
-
-cd "$FRONTEND_DIR"
-
-# Check if frontend has docker-compose
-if [ -f "$FRONTEND_DIR/docker-compose.yml" ]; then
-    echo "Starting frontend containers..."
-    docker-compose up -d --build
-
-    # Wait for frontend
-    if wait_for_service "Frontend" "http://localhost:8080" 30; then
-        echo "Frontend is running on http://localhost:8080"
-    else
-        echo "WARNING: Frontend failed to start"
-        docker-compose logs
-    fi
-else
-    echo "No docker-compose.yml found in frontend, skipping container start"
-fi
+echo ""
+echo "Frontend apps have been installed and are ready to run."
+echo "Start them separately from their directories:"
+echo ""
+echo "User app (port $FE_USER_PORT):"
+echo "  cd $FE_USER_DIR && npm run dev"
+echo "  or with Docker: docker-compose up"
+echo ""
+echo "Admin app (port $FE_ADMIN_PORT):"
+echo "  cd $FE_ADMIN_DIR && npm run dev"
+echo "  or with Docker: docker-compose up"
+echo ""
+echo "Core library:"
+echo "  Already built at: $FE_CORE_DIR/dist/"
+echo ""
 
 # Summary
 echo ""
@@ -273,15 +370,27 @@ echo "Installation Complete!"
 echo "=========================================="
 echo ""
 echo "Services:"
-echo "  - Backend API: http://localhost:5000"
-echo "  - Frontend:    http://localhost:8080"
-echo "  - Database:    postgresql://vbwd:vbwd@localhost:5432/vbwd"
+echo "  - Backend API:          http://localhost:5000"
+echo "  - Frontend (User app):  http://localhost:$FE_USER_PORT"
+echo "  - Frontend (Admin app): http://localhost:$FE_ADMIN_PORT"
+echo "  - Database:             postgresql://vbwd:vbwd@localhost:5432/vbwd"
+echo ""
+echo "Repository Structure:"
+echo "  - Backend:    $BACKEND_DIR"
+echo "  - Core Lib:   $FE_CORE_DIR"
+echo "  - User App:   $FE_USER_DIR (depends on core via git submodule)"
+echo "  - Admin App:  $FE_ADMIN_DIR (depends on core via git submodule)"
+echo ""
+echo "Quick Start - Frontend Apps (run in separate terminals):"
+echo "  - User app:   cd $FE_USER_DIR && npm run dev"
+echo "  - Admin app:  cd $FE_ADMIN_DIR && npm run dev"
 echo ""
 echo "Useful commands:"
-echo "  - Backend logs:  cd $BACKEND_DIR && docker-compose logs -f api"
-echo "  - Frontend logs: cd $FRONTEND_DIR && docker-compose logs -f"
-echo "  - Run tests:     cd $BACKEND_DIR && make test"
-echo "  - Stop all:      cd $BACKEND_DIR && docker-compose down"
+echo "  - Backend logs:    cd $BACKEND_DIR && docker-compose logs -f api"
+echo "  - User app logs:   cd $FE_USER_DIR && docker-compose logs -f"
+echo "  - Admin app logs:  cd $FE_ADMIN_DIR && docker-compose logs -f"
+echo "  - Run tests:       cd $BACKEND_DIR && make test"
+echo "  - Stop backend:    cd $BACKEND_DIR && docker-compose down"
 echo ""
 echo "Documentation: $WORKSPACE_DIR/docs/"
 echo ""

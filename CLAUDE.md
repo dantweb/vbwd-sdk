@@ -9,26 +9,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **CE (Community Edition)**: Self-hosted subscription platform (current focus)
 - **ME (Marketplace Edition)**: Cloud SaaS marketplace (planned)
 
-**Last Updated:** 2026-01-02
+**Last Updated:** 2026-02-21
 **License:** CC0 1.0 Universal (Public Domain)
 
-## Monorepo Structure
+## Repository Structure (Frontend Split into 3 Independent Repos)
+
+As of 2026-02-20, the frontend has been split into 3 independent GitHub repositories:
 
 ```
 vbwd-sdk/
 ├── vbwd-backend/           # Python/Flask API (292 tests)
-├── vbwd-frontend/          # Vue.js applications
-│   ├── user/vue/           # User-facing app
-│   ├── admin/vue/          # Admin backoffice (71 unit, 108 E2E tests)
-│   └── core/               # Shared component library
+├── vbwd-fe-core/           # Shared Vue component library (separate GitHub repo)
+│   ├── src/
+│   ├── dist/               # Built component library
+│   ├── package.json
+│   └── docker-compose.yaml
+├── vbwd-fe-user/           # User-facing Vue app (separate GitHub repo)
+│   ├── src/
+│   ├── vbwd-fe-core/       # git submodule → vbwd-fe-core repo
+│   ├── package.json
+│   └── docker-compose.yaml (port 8080)
+├── vbwd-fe-admin/          # Admin backoffice Vue app (separate GitHub repo)
+│   ├── src/
+│   ├── vbwd-fe-core/       # git submodule → vbwd-fe-core repo
+│   ├── package.json
+│   └── docker-compose.yaml (port 8081)
+├── recipes/                # Installation scripts
+│   ├── dev-install-ce.sh   # Complete setup (all 3 frontend repos + backend)
+│   └── dev-install-taro.sh # Setup CE + Taro plugin database
 └── docs/                   # Architecture documentation
     ├── architecture_core_server_ce/      # Backend architecture
     ├── architecture_core_view_admin/     # Admin frontend architecture
     ├── architecture_core_view_component/ # Shared component architecture
-    └── devlog/                           # Development logs
+    └── devlog/                           # Development logs and reports
 ```
 
+**Key Points:**
+- Each frontend repo is independent with its own CI/CD pipeline
+- `vbwd-fe-user` and `vbwd-fe-admin` depend on `vbwd-fe-core` via git submodules
+- Build order critical: `vbwd-fe-core` must be built first (generates `dist/`)
+- Installation scripts handle correct clone order and submodule initialization
+
 ## Development Commands
+
+### Installation
+
+```bash
+# Complete development setup (all repos + backend)
+./recipes/dev-install-ce.sh
+
+# Complete setup including Taro plugin database
+./recipes/dev-install-taro.sh
+```
 
 ### Backend (`vbwd-backend/`)
 
@@ -47,34 +79,40 @@ make shell               # Access API container bash
 make logs                # View service logs
 ```
 
-### Frontend (`vbwd-frontend/`)
+### Frontend Core Library (`vbwd-fe-core/`)
 
 ```bash
-make up                  # Start production containers
-make dev                 # Start development mode
-make test                # Run unit tests (user + admin)
-make test-admin          # Admin unit tests only
-make test-user           # User unit tests only
-make lint                # Run ESLint for all apps
+npm install              # Install dependencies
+npm run build            # Build component library
+npm run dev              # Start dev server
+npm run test             # Run tests
+npm run lint             # Run ESLint
 ```
 
-### Admin Frontend (`vbwd-frontend/admin/vue/`)
+### Frontend User App (`vbwd-fe-user/` - port 8080)
 
 ```bash
-npm run dev              # Start dev server (port 5174)
+npm install              # Install (includes submodule)
+npm run dev              # Start dev server (port 8080)
 npm run build            # Production build
 npm run test             # Unit tests (Vitest)
 npm run test:e2e         # E2E tests (Playwright)
 npm run test:e2e:ui      # E2E with Playwright UI
 npm run lint             # ESLint
+docker-compose up        # Start with Docker (or separate terminal)
 ```
 
-### Pre-commit Checks (`vbwd-frontend/`)
+### Frontend Admin App (`vbwd-fe-admin/` - port 8081)
 
 ```bash
-./bin/pre-commit-check.sh --admin --unit     # Admin unit tests
-./bin/pre-commit-check.sh --admin --e2e      # Admin E2E tests
-./bin/pre-commit-check.sh --admin --style    # Lint + TypeScript
+npm install              # Install (includes submodule)
+npm run dev              # Start dev server (port 8081)
+npm run build            # Production build
+npm run test             # Unit tests (Vitest)
+npm run test:e2e         # E2E tests (Playwright)
+npm run test:e2e:ui      # E2E with Playwright UI
+npm run lint             # ESLint
+docker-compose up        # Start with Docker (or separate terminal)
 ```
 
 ## Tech Stack
@@ -131,11 +169,26 @@ All routes under `/api/v1/`:
 
 ## Frontend Architecture
 
-### Plugin System (View-Core)
+### Core Library (`vbwd-fe-core/`)
 
-Located in `vbwd-frontend/core/src/plugins/`:
+Shared Vue component library (exported as `vbwd-view-component`):
+```
+vbwd-fe-core/
+├── src/
+│   ├── components/       # Reusable Vue components
+│   ├── plugins/          # Plugin system
+│   ├── stores/           # Pinia stores
+│   └── types/            # TypeScript type definitions
+├── dist/                 # Built library (generated by npm run build)
+├── package.json          # Exports as vbwd-view-component
+└── docker-compose.yaml   # Development docker setup
+```
+
+### User App Plugin System (`vbwd-fe-user/`)
+
+Located in `vbwd-fe-user/src/plugins/`:
 ```typescript
-import { PluginRegistry, PlatformSDK, IPlugin } from '@vbwd/view-component';
+import { PluginRegistry, PlatformSDK, IPlugin } from 'vbwd-view-component';
 
 const myPlugin: IPlugin = {
   name: 'my-plugin',
@@ -143,6 +196,7 @@ const myPlugin: IPlugin = {
   install(sdk) {
     sdk.addRoute({ path: '/my-page', name: 'MyPage', component: () => import('./MyPage.vue') });
     sdk.createStore('myStore', { state: () => ({ count: 0 }) });
+    sdk.addTranslations('en', { /* translations */ });
   },
   activate() { console.log('Plugin activated'); },
   deactivate() { console.log('Plugin deactivated'); }
@@ -154,11 +208,11 @@ await registry.installAll(sdk);
 await registry.activate('my-plugin');
 ```
 
-**Note:** Admin app currently uses flat structure instead of plugins.
+**Note:** User app uses plugin architecture; Admin app uses flat structure.
 
-### Admin App Structure
+### Admin App Structure (`vbwd-fe-admin/`)
 ```
-admin/vue/
+vbwd-fe-admin/
 ├── src/
 │   ├── api/              # API client
 │   ├── stores/           # Pinia stores
@@ -188,17 +242,34 @@ admin/vue/
 
 ### Backend
 ```bash
+cd vbwd-backend
 docker-compose run --rm test pytest tests/unit/ -v
 docker-compose run --rm test pytest tests/unit/services/test_auth_service.py -v
 ```
 
-### Frontend E2E (Playwright)
+### Frontend - User App (`vbwd-fe-user/`)
 ```bash
-cd vbwd-frontend/admin/vue
-npx playwright test                    # Run all tests
-npx playwright test admin-users        # Run specific spec
+cd vbwd-fe-user
+npm run test                           # Unit tests (Vitest)
+npm run test:e2e                       # E2E tests (Playwright)
 npx playwright test --ui               # Interactive UI mode
-E2E_BASE_URL=http://localhost:8081 npx playwright test  # Against docker
+E2E_BASE_URL=http://localhost:8080 npx playwright test  # Against local server
+```
+
+### Frontend - Admin App (`vbwd-fe-admin/`)
+```bash
+cd vbwd-fe-admin
+npm run test                           # Unit tests (Vitest)
+npm run test:e2e                       # E2E tests (Playwright)
+npx playwright test --ui               # Interactive UI mode
+E2E_BASE_URL=http://localhost:8081 npx playwright test  # Against local server
+```
+
+### Frontend - Core Library (`vbwd-fe-core/`)
+```bash
+cd vbwd-fe-core
+npm run test                           # Unit tests
+npm run lint                           # ESLint
 ```
 
 Test credentials:
@@ -236,9 +307,11 @@ The frontend nginx proxies `/api/` to the backend:
 
 ## Known Issues
 
-1. **E2E Tests in Docker**: Need `E2E_BASE_URL` env var to run against docker container
-2. **Architectural Deviations**: Frontend uses flat structure instead of planned plugin architecture
-3. **Shared Components**: `@vbwd/view-component` is minimal, apps have duplicate code
+1. **E2E Tests in Docker**: Need `E2E_BASE_URL` env var to run against docker container (for frontend apps)
+2. **Admin App Architecture**: Uses flat structure instead of plugin system (user app uses plugins)
+3. **Submodule Initialization**: Must clone frontend apps with `git clone --recurse-submodules` or manually init
+4. **Build Order Dependency**: `vbwd-fe-core` must complete `npm run build` before other apps can `npm install`
+5. **Multiple Frontend Ports**: User app (8080) and Admin app (8081) must run in separate terminals
 
 ## Documentation
 
