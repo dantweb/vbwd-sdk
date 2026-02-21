@@ -350,48 +350,48 @@ jobs:
 
           if [ ! -f "tests/e2e/basic.spec.ts" ] && [ ! -f "tests/e2e/basic.spec.js" ]; then
             cat > tests/e2e/basic.spec.ts << 'EOF'
-import { test, expect } from '@playwright/test';
+          import { test, expect } from '@playwright/test';
 
-test.describe('VBWD Platform E2E Tests', () => {
-  test('should load frontend homepage', async ({ page }) => {
-    await page.goto('http://localhost:8080');
-    await expect(page).toHaveTitle(/VBWD|Vue/i);
-  });
+          test.describe('VBWD Platform E2E Tests', () => {
+            test('should load frontend homepage', async ({ page }) => {
+              await page.goto('http://localhost:8080');
+              await expect(page).toHaveTitle(/VBWD|Vue/i);
+            });
 
-  test('should connect to backend API', async ({ page, request }) => {
-    const response = await request.get('http://localhost:5000/health');
-    expect(response.ok()).toBeTruthy();
-  });
+            test('should connect to backend API', async ({ page, request }) => {
+              const response = await request.get('http://localhost:5000/health');
+              expect(response.ok()).toBeTruthy();
+            });
 
-  test('should display user interface elements', async ({ page }) => {
-    await page.goto('http://localhost:8080');
-    await page.waitForLoadState('networkidle');
-    const content = await page.textContent('body');
-    expect(content).toBeTruthy();
-  });
-});
-EOF
+            test('should display user interface elements', async ({ page }) => {
+              await page.goto('http://localhost:8080');
+              await page.waitForLoadState('networkidle');
+              const content = await page.textContent('body');
+              expect(content).toBeTruthy();
+            });
+          });
+          EOF
           fi
 
           if [ ! -f "playwright.config.ts" ] && [ ! -f "playwright.config.js" ]; then
             cat > playwright.config.ts << 'EOF'
-import { defineConfig } from '@playwright/test';
+          import { defineConfig } from '@playwright/test';
 
-export default defineConfig({
-  testDir: './tests/e2e',
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: [['html'], ['junit', { outputFile: 'test-results/e2e-results.xml' }]],
-  use: {
-    baseURL: 'http://localhost:8080',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-  },
-  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
-});
-EOF
+          export default defineConfig({
+            testDir: './tests/e2e',
+            fullyParallel: true,
+            forbidOnly: !!process.env.CI,
+            retries: process.env.CI ? 2 : 0,
+            workers: process.env.CI ? 1 : undefined,
+            reporter: [['html'], ['junit', { outputFile: 'test-results/e2e-results.xml' }]],
+            use: {
+              baseURL: 'http://localhost:8080',
+              trace: 'on-first-retry',
+              screenshot: 'only-on-failure',
+            },
+            projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+          });
+          EOF
           fi
 
       - name: Run Playwright E2E tests (core)
