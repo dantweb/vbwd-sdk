@@ -335,7 +335,7 @@ echo "=========================================="
 
 cd "$BACKEND_DIR"
 echo "Running all backend tests..."
-if docker compose run --rm python-test pytest tests/ -v --tb=short; then
+if docker compose run --rm test pytest tests/ -v --tb=short; then
     echo "Backend tests passed!"
 else
     echo "ERROR: Backend tests failed"
