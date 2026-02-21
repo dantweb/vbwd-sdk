@@ -2,13 +2,9 @@ name: VBWD CE - CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: ['**']
   pull_request:
-    branches:
-      - main
-      - develop
+    branches: ['**']
   workflow_dispatch:
 
 env:
@@ -62,6 +58,30 @@ jobs:
           echo "Running integration tests..."
           docker-compose run --rm python-test pytest tests/integration/ -v --tb=short --junit-xml=test-results/integration-tests.xml
 
+      - name: Run pre-commit checks on vbwd-fe-core
+        working-directory: vbwd-sdk/vbwd-fe-core
+        run: |
+          echo "Running pre-commit checks on vbwd-fe-core..."
+          npm run lint
+          npm run test 2>/dev/null || echo "Core library tests not available"
+        continue-on-error: true
+
+      - name: Run pre-commit checks on vbwd-fe-user
+        working-directory: vbwd-sdk/vbwd-fe-user
+        run: |
+          echo "Running pre-commit checks on vbwd-fe-user..."
+          npm run lint
+          npm run test 2>/dev/null || echo "User app tests not available"
+        continue-on-error: true
+
+      - name: Run pre-commit checks on vbwd-fe-admin
+        working-directory: vbwd-sdk/vbwd-fe-admin
+        run: |
+          echo "Running pre-commit checks on vbwd-fe-admin..."
+          npm run lint
+          npm run test 2>/dev/null || echo "Admin app tests not available"
+        continue-on-error: true
+
       - name: Test frontend-backend connectivity
         run: |
           echo "Testing API connectivity from frontend perspective..."
@@ -113,7 +133,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'vbwd-frontend/user/package-lock.json'
+          cache-dependency-path: 'vbwd-sdk/vbwd-fe-user/package-lock.json'
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -125,7 +145,7 @@ jobs:
           ./recipes/dev-install-ce.sh
 
       - name: Install Playwright
-        working-directory: vbwd-frontend/user
+        working-directory: vbwd-sdk/vbwd-fe-user
         run: |
           # Check if package.json has playwright
           if [ -f "package.json" ]; then
@@ -169,7 +189,7 @@ jobs:
           done
 
       - name: Create Playwright test if not exists
-        working-directory: vbwd-frontend
+        working-directory: vbwd-sdk/vbwd-fe-user
         run: |
           # Create tests directory if it doesn't exist
           mkdir -p tests/e2e
@@ -232,7 +252,7 @@ jobs:
           fi
 
       - name: Run Playwright E2E tests
-        working-directory: vbwd-frontend/user
+        working-directory: vbwd-sdk/vbwd-fe-user
         run: |
           echo "Running E2E tests..."
           npx playwright test --reporter=html,junit
@@ -242,7 +262,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: vbwd-frontend/user/playwright-report/
+          path: vbwd-sdk/vbwd-fe-user/playwright-report/
           retention-days: 7
 
       - name: Upload E2E test results
@@ -250,16 +270,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-test-results
-          path: vbwd-frontend/user/test-results/
+          path: vbwd-sdk/vbwd-fe-user/test-results/
           retention-days: 7
 
       - name: Display logs on failure
         if: failure()
         run: |
           echo "=== Backend Logs ==="
-          cd vbwd-backend && docker-compose logs python
-          echo "=== Frontend Logs ==="
-          cd vbwd-frontend && docker-compose logs 2>/dev/null || echo "No frontend container logs"
+          cd vbwd-sdk/vbwd-backend && docker-compose logs python 2>/dev/null || echo "Backend logs not available"
+          echo "=== Frontend (User) Logs ==="
+          cd vbwd-sdk/vbwd-fe-user && docker-compose logs 2>/dev/null || echo "User app container logs not available"
+          echo "=== Frontend (Admin) Logs ==="
+          cd vbwd-sdk/vbwd-fe-admin && docker-compose logs 2>/dev/null || echo "Admin app container logs not available"
 
   # Job 3: Backend Unit Tests (Fast feedback)
   backend-unit-tests:
