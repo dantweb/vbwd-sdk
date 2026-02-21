@@ -93,8 +93,8 @@ if ! command_exists docker; then
     exit 1
 fi
 
-if ! command_exists docker-compose; then
-    echo "ERROR: docker-compose is not installed"
+if ! command_exists docker compose; then
+    echo "ERROR: docker compose is not installed"
     exit 1
 fi
 
@@ -177,11 +177,11 @@ else
 fi
 
 echo "Building vbwd-fe-core..."
-if command_exists docker-compose || command_exists docker; then
+if command_exists docker compose || command_exists docker; then
     cd "$FE_CORE_DIR"
-    if [ -f "docker-compose.yaml" ] || [ -f "docker-compose.yml" ]; then
+    if [ -f "docker compose.yaml" ] || [ -f "docker compose.yml" ]; then
         # Use Docker Compose if available
-        docker-compose run --rm build npm install && npm run build || true
+        docker compose run --rm build npm install && npm run build || true
     else
         npm install
         npm run build
@@ -273,16 +273,16 @@ cd "$BACKEND_DIR"
 
 # Stop any existing containers
 echo "Stopping any existing containers..."
-docker-compose down -v || true
+docker compose down -v || true
 
 # Build and start containers
 echo "Building and starting containers..."
 if [ "$IS_CI" = true ]; then
     # In CI, use detached mode and wait for services
-    docker-compose up -d --build
+    docker compose up -d --build
 else
     # In local dev, also use detached mode
-    docker-compose up -d --build
+    docker compose up -d --build
 fi
 
 # Wait for services to be ready
@@ -296,17 +296,17 @@ if wait_for_service "Backend API" "http://localhost:5000/health" 60; then
 else
     echo "ERROR: Backend API failed to start"
     echo "Checking backend logs..."
-    docker-compose logs api
+    docker compose logs api
     exit 1
 fi
 
 # Check database
 echo "Checking database connection..."
-if docker-compose exec -T api python -c "from sqlalchemy import create_engine; import os; e=create_engine(os.getenv('DATABASE_URL', 'postgresql://vbwd:vbwd@postgres:5432/vbwd')); c=e.connect(); print('Database: OK'); c.close()" 2>/dev/null; then
+if docker compose exec -T api python -c "from sqlalchemy import create_engine; import os; e=create_engine(os.getenv('DATABASE_URL', 'postgresql://vbwd:vbwd@postgres:5432/vbwd')); c=e.connect(); print('Database: OK'); c.close()" 2>/dev/null; then
     echo "Database is connected and ready"
 else
     echo "WARNING: Database connection check failed"
-    docker-compose logs postgres
+    docker compose logs postgres
 fi
 
 # Run database migrations
@@ -335,7 +335,7 @@ echo "=========================================="
 
 cd "$BACKEND_DIR"
 echo "Running all backend tests..."
-if docker-compose run --rm python-test pytest tests/ -v --tb=short; then
+if docker compose run --rm python-test pytest tests/ -v --tb=short; then
     echo "Backend tests passed!"
 else
     echo "ERROR: Backend tests failed"
@@ -353,11 +353,11 @@ echo "Start them separately from their directories:"
 echo ""
 echo "User app (port $FE_USER_PORT):"
 echo "  cd $FE_USER_DIR && npm run dev"
-echo "  or with Docker: docker-compose up"
+echo "  or with Docker: docker compose up"
 echo ""
 echo "Admin app (port $FE_ADMIN_PORT):"
 echo "  cd $FE_ADMIN_DIR && npm run dev"
-echo "  or with Docker: docker-compose up"
+echo "  or with Docker: docker compose up"
 echo ""
 echo "Core library:"
 echo "  Already built at: $FE_CORE_DIR/dist/"
@@ -386,11 +386,11 @@ echo "  - User app:   cd $FE_USER_DIR && npm run dev"
 echo "  - Admin app:  cd $FE_ADMIN_DIR && npm run dev"
 echo ""
 echo "Useful commands:"
-echo "  - Backend logs:    cd $BACKEND_DIR && docker-compose logs -f api"
-echo "  - User app logs:   cd $FE_USER_DIR && docker-compose logs -f"
-echo "  - Admin app logs:  cd $FE_ADMIN_DIR && docker-compose logs -f"
+echo "  - Backend logs:    cd $BACKEND_DIR && docker compose logs -f api"
+echo "  - User app logs:   cd $FE_USER_DIR && docker compose logs -f"
+echo "  - Admin app logs:  cd $FE_ADMIN_DIR && docker compose logs -f"
 echo "  - Run tests:       cd $BACKEND_DIR && make test"
-echo "  - Stop backend:    cd $BACKEND_DIR && docker-compose down"
+echo "  - Stop backend:    cd $BACKEND_DIR && docker compose down"
 echo ""
 echo "Documentation: $WORKSPACE_DIR/docs/"
 echo ""

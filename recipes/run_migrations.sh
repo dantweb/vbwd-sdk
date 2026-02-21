@@ -29,10 +29,10 @@ fi
 
 cd "$BACKEND_DIR"
 
-# Check if docker-compose services are running
-if ! docker-compose ps | grep -q "api.*Up"; then
+# Check if docker compose services are running
+if ! docker compose ps | grep -q "api.*Up"; then
     echo "ERROR: Backend API container is not running"
-    echo "Start the containers first with: docker-compose up -d"
+    echo "Start the containers first with: docker compose up -d"
     exit 1
 fi
 
@@ -42,7 +42,7 @@ COMMAND="${1:-upgrade}"
 case "$COMMAND" in
     upgrade)
         echo "Running database migrations..."
-        docker-compose exec -T api alembic upgrade head
+        docker compose exec -T api alembic upgrade head
         if [ $? -eq 0 ]; then
             echo "Migrations completed successfully!"
         else
@@ -53,7 +53,7 @@ case "$COMMAND" in
     downgrade)
         REVISION="${2:--1}"
         echo "Rolling back migration to: $REVISION"
-        docker-compose exec -T api alembic downgrade "$REVISION"
+        docker compose exec -T api alembic downgrade "$REVISION"
         if [ $? -eq 0 ]; then
             echo "Rollback completed successfully!"
         else
@@ -64,7 +64,7 @@ case "$COMMAND" in
     revision)
         MESSAGE="${2:-auto migration}"
         echo "Creating new migration: $MESSAGE"
-        docker-compose exec -T api alembic revision --autogenerate -m "$MESSAGE"
+        docker compose exec -T api alembic revision --autogenerate -m "$MESSAGE"
         if [ $? -eq 0 ]; then
             echo "Migration file created successfully!"
         else
@@ -74,11 +74,11 @@ case "$COMMAND" in
         ;;
     current)
         echo "Current migration revision:"
-        docker-compose exec -T api alembic current
+        docker compose exec -T api alembic current
         ;;
     history)
         echo "Migration history:"
-        docker-compose exec -T api alembic history
+        docker compose exec -T api alembic history
         ;;
     help|--help|-h)
         echo ""
