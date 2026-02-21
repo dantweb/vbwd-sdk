@@ -2,12 +2,12 @@ name: Backend CI
 
 on:
   push:
-    branches: [main, +]
+    branches: ['**']
     paths:
       - 'vbwd-backend/**'
       - '.github/workflows/backend-ci.yml'
   pull_request:
-    branches: [main, develop]
+    branches: ['**']
     paths:
       - 'vbwd-backend/**'
       - '.github/workflows/backend-ci.yml'
@@ -57,6 +57,20 @@ jobs:
     needs: lint
 
     services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vbwd
+          POSTGRES_PASSWORD: vbwd
+          POSTGRES_DB: vbwd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
       redis:
         image: redis:7-alpine
         ports:
@@ -85,8 +99,8 @@ jobs:
       - name: Run unit tests
         env:
           FLASK_ENV: testing
-          DATABASE_URL: 'sqlite:///:memory:'
-          REDIS_URL: 'redis://localhost:6379/1'
+          DATABASE_URL: "postgresql://vbwd:vbwd@localhost:5432/vbwd"
+          REDIS_URL: "redis://localhost:6379/1"
         run: pytest tests/unit/ -v --tb=short
 
   # ============================================
@@ -174,6 +188,20 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vbwd
+          POSTGRES_PASSWORD: vbwd
+          POSTGRES_DB: vbwd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
       redis:
         image: redis:7-alpine
         ports:
@@ -197,8 +225,8 @@ jobs:
       - name: Run tests with coverage
         env:
           FLASK_ENV: testing
-          DATABASE_URL: 'sqlite:///:memory:'
-          REDIS_URL: 'redis://localhost:6379/1'
+          DATABASE_URL: "postgresql://vbwd:vbwd@localhost:5432/vbwd"
+          REDIS_URL: "redis://localhost:6379/1"
         run: pytest tests/unit/ --cov=src --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
