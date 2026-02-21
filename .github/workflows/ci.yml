@@ -233,14 +233,14 @@ jobs:
         run: |
           if [ ! -f ".env" ]; then
             cp .env.example .env || cat > .env << 'EOF'
-POSTGRES_PASSWORD=vbwd
-POSTGRES_DB=vbwd
-POSTGRES_USER=vbwd
-DATABASE_URL=postgresql://vbwd:vbwd@localhost:5432/vbwd
-FLASK_ENV=testing
-FLASK_SECRET_KEY=test-secret-key
-REDIS_URL=redis://localhost:6379/0
-EOF
+          POSTGRES_PASSWORD=vbwd
+          POSTGRES_DB=vbwd
+          POSTGRES_USER=vbwd
+          DATABASE_URL=postgresql://vbwd:vbwd@localhost:5432/vbwd
+          FLASK_ENV=testing
+          FLASK_SECRET_KEY=test-secret-key
+          REDIS_URL=redis://localhost:6379/0
+          EOF
           fi
 
       - name: Run database migrations
