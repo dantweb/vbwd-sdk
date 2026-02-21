@@ -1,6 +1,5 @@
 name: VBWD CE - CI/CD Pipeline (Organized)
 
-
 on:
   push:
     branches: ['**']
