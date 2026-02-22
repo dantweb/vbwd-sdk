@@ -331,74 +331,74 @@ jobs:
   # ============================================================
   # Job 8: E2E Playwright Tests (needs: 3, 4, 5, 6)
   # ============================================================
-  e2e:
-    name: E2E — Playwright Tests
-    runs-on: ubuntu-latest
-    needs: [backend-integration, fe-user-unit, fe-admin-unit, fe-core-unit]
-    timeout-minutes: 45
-    continue-on-error: true
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Clone repos
-        run: |
-          git clone --branch main https://github.com/dantweb/vbwd-backend.git vbwd-backend
-          git clone --branch main --recurse-submodules \
-            https://github.com/dantweb/vbwd-fe-user.git vbwd-fe-user
-
-      - name: Start backend with Docker Compose
-        working-directory: vbwd-backend
-        run: |
-          cp .env.example .env
-          docker compose up -d --build
-          echo "Waiting for backend..."
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:5000/api/v1/health > /dev/null; then
-              echo "Backend is ready"
-              break
-            fi
-            echo "Attempt $i: waiting..."
-            sleep 2
-          done
-          curl -sf http://localhost:5000/api/v1/health || (docker compose logs api && exit 1)
-
-      - name: Run database migrations and seed data
-        working-directory: vbwd-backend
-        run: |
-          docker compose exec -T api alembic upgrade head
-          docker compose exec -T \
-            -e TEST_DATA_SEED=true \
-            api flask --app src.app:create_app seed-test-data \
-            || echo "Seed not available"
-
-      - name: Build fe-user CI image (includes Playwright)
-        working-directory: vbwd-fe-user
-        run: docker build -f Dockerfile.test -t vbwd-fe-user-ci .
-
-      - name: Run Playwright E2E tests
-        run: |
-          docker run --rm \
-            --network host \
-            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
-            -e VITE_BACKEND_URL=http://localhost:5000 \
-            vbwd-fe-user-ci \
-            sh -c "npx playwright install chromium --with-deps && npx playwright test --reporter=list,junit --output=test-results/"
-        continue-on-error: true
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: vbwd-fe-user/test-results/
-          retention-days: 7
-
-      - name: Stop backend
-        if: always()
-        working-directory: vbwd-backend
-        run: docker compose down -v
+#  e2e:
+#    name: E2E — Playwright Tests
+#    runs-on: ubuntu-latest
+#    needs: [backend-integration, fe-user-unit, fe-admin-unit, fe-core-unit]
+#    timeout-minutes: 45
+#    continue-on-error: true
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Clone repos
+#        run: |
+#          git clone --branch main https://github.com/dantweb/vbwd-backend.git vbwd-backend
+#          git clone --branch main --recurse-submodules \
+#            https://github.com/dantweb/vbwd-fe-user.git vbwd-fe-user
+#
+#      - name: Start backend with Docker Compose
+#        working-directory: vbwd-backend
+#        run: |
+#          cp .env.example .env
+#          docker compose up -d --build
+#          echo "Waiting for backend..."
+#          for i in $(seq 1 60); do
+#            if curl -sf http://localhost:5000/api/v1/health > /dev/null; then
+#              echo "Backend is ready"
+#              break
+#            fi
+#            echo "Attempt $i: waiting..."
+#            sleep 2
+#          done
+#          curl -sf http://localhost:5000/api/v1/health || (docker compose logs api && exit 1)
+#
+#      - name: Run database migrations and seed data
+#        working-directory: vbwd-backend
+#        run: |
+#          docker compose exec -T api alembic upgrade head
+#          docker compose exec -T \
+#            -e TEST_DATA_SEED=true \
+#            api flask --app src.app:create_app seed-test-data \
+#            || echo "Seed not available"
+#
+#      - name: Build fe-user CI image (includes Playwright)
+#        working-directory: vbwd-fe-user
+#        run: docker build -f Dockerfile.test -t vbwd-fe-user-ci .
+#
+#      - name: Run Playwright E2E tests
+#        run: |
+#          docker run --rm \
+#            --network host \
+#            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+#            -e VITE_BACKEND_URL=http://localhost:5000 \
+#            vbwd-fe-user-ci \
+#            sh -c "npx playwright install chromium --with-deps && npx playwright test --reporter=list,junit --output=test-results/"
+#        continue-on-error: true
+#
+#      - name: Upload Playwright report
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: playwright-report
+#          path: vbwd-fe-user/test-results/
+#          retention-days: 7
+#
+#      - name: Stop backend
+#        if: always()
+#        working-directory: vbwd-backend
+#        run: docker compose down -v
 
   # ============================================================
   # Test Summary

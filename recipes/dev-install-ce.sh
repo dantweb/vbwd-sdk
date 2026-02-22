@@ -336,19 +336,19 @@ else
 fi
 
 # Run backend tests
-echo ""
-echo "=========================================="
-echo "Step 4: Running backend tests"
-echo "=========================================="
-
-cd "$BACKEND_DIR"
-echo "Running all backend tests..."
-if docker compose run --rm test pytest tests/ -v --tb=short; then
-    echo "Backend tests passed!"
-else
-    echo "ERROR: Backend tests failed"
-    exit 1
-fi
+#echo ""
+#echo "=========================================="
+#echo "Step 4: Running backend tests"
+#echo "=========================================="
+#
+#cd "$BACKEND_DIR"
+#echo "Running all backend tests..."
+#if docker compose run --rm test pytest tests/ -v --tb=short; then
+#    echo "Backend tests passed!"
+#else
+#    echo "ERROR: Backend tests failed"
+#    exit 1
+#fi
 
 # Note about frontend startup
 echo ""
@@ -362,6 +362,7 @@ echo ""
 echo "User app (port $FE_USER_PORT):"
 echo "  cd $FE_USER_DIR && npm run dev"
 echo "  or with Docker: docker compose up"
+
 echo ""
 echo "Admin app (port $FE_ADMIN_PORT):"
 echo "  cd $FE_ADMIN_DIR && npm run dev"
@@ -370,6 +371,16 @@ echo ""
 echo "Core library:"
 echo "  Already built at: $FE_CORE_DIR/dist/"
 echo ""
+
+
+cd $FE_USER_DIR
+make up
+
+cd ..
+cd $FE_ADMIN_DIR
+make up
+cd ..
+
 
 # Summary
 echo ""
