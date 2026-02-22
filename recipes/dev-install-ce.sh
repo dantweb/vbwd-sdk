@@ -215,6 +215,10 @@ else
     echo "WARNING: Submodule vbwd-fe-core may not be properly initialized"
 fi
 
+echo "Building vbwd-fe-core submodule for vbwd-fe-user..."
+cd "$FE_USER_DIR/vbwd-fe-core"
+npm install && npm run build && rm -rf node_modules
+
 echo "Installing dependencies for vbwd-fe-user..."
 cd "$FE_USER_DIR"
 npm install
@@ -242,6 +246,10 @@ if [ -d "$FE_ADMIN_DIR/vbwd-fe-core" ] && [ -f "$FE_ADMIN_DIR/vbwd-fe-core/packa
 else
     echo "WARNING: Submodule vbwd-fe-core may not be properly initialized"
 fi
+
+echo "Building vbwd-fe-core submodule for vbwd-fe-admin..."
+cd "$FE_ADMIN_DIR/vbwd-fe-core"
+npm install && npm run build && rm -rf node_modules
 
 echo "Installing dependencies for vbwd-fe-admin..."
 cd "$FE_ADMIN_DIR"
