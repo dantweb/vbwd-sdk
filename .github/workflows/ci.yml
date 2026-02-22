@@ -1,6 +1,5 @@
 name: VBWD CE - CI/CD Pipeline
 
-
 on:
   push:
     branches: ['**']
@@ -12,13 +11,87 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# ============================================================
+# CI Job Structure (all tests run inside Docker containers):
+#
+#  1. install              → validates dev-install-ce.sh script
+#  2. backend-unit         → needs 1 │ docker compose + pre-commit-check --unit
+#  3. backend-integration  → needs 2 │ docker compose (api up) + pre-commit-check --integration
+#  4. fe-user-unit         → needs 1 │ Dockerfile.test + pre-commit-check --unit
+#  5. fe-admin-unit        → needs 1 │ Dockerfile.test + pre-commit-check --unit
+#  6. fe-core-unit         → needs 1 │ Dockerfile.test + pre-commit-check --unit
+#  7. fe-admin-integration → needs 5 │ Dockerfile.test + pre-commit-check --integration
+#  8. e2e                  → needs 3,4,5,6 │ backend docker compose + playwright docker
+# ============================================================
+
 jobs:
-  # ============================================
-  # Job 1: Backend Tests (Docker Compose)
-  # ============================================
-  backend-tests:
-    name: Backend Tests
+  # ============================================================
+  # Job 1: Install — validates dev-install-ce.sh
+  # ============================================================
+  install:
+    name: Install & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run installation script
+        run: |
+          chmod +x recipes/dev-install-ce.sh
+          ./recipes/dev-install-ce.sh
+
+  # ============================================================
+  # Job 2: Backend Unit Tests (needs: install)
+  # ============================================================
+  backend-unit:
+    name: Backend — Unit Tests
+    runs-on: ubuntu-latest
+    needs: install
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Clone vbwd-backend
+        run: git clone --branch main https://github.com/dantweb/vbwd-backend.git vbwd-backend
+
+      - name: Create .env file
+        working-directory: vbwd-backend
+        run: cp .env.example .env
+
+      - name: Run database migrations
+        working-directory: vbwd-backend
+        run: docker compose run --rm test alembic upgrade head
+
+      - name: Run unit tests via pre-commit-check
+        working-directory: vbwd-backend
+        run: |
+          docker compose run --rm test \
+            ./bin/pre-commit-check.sh --unit
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-unit-results
+          path: vbwd-backend/test-results/
+          retention-days: 7
+
+      - name: Stop services
+        if: always()
+        working-directory: vbwd-backend
+        run: docker compose down -v
+
+  # ============================================================
+  # Job 3: Backend Integration Tests (needs: backend-unit)
+  # ============================================================
+  backend-integration:
+    name: Backend — Integration Tests
+    runs-on: ubuntu-latest
+    needs: backend-unit
     timeout-minutes: 25
 
     steps:
@@ -32,7 +105,7 @@ jobs:
         working-directory: vbwd-backend
         run: cp .env.example .env
 
-      - name: Build and start services
+      - name: Build and start API + services
         working-directory: vbwd-backend
         run: docker compose up -d --build
 
@@ -52,7 +125,7 @@ jobs:
 
       - name: Run database migrations
         working-directory: vbwd-backend
-        run: docker compose exec -T api flask --app src.app:create_app db upgrade
+        run: docker compose exec -T api alembic upgrade head
 
       - name: Seed test data
         working-directory: vbwd-backend
@@ -62,26 +135,17 @@ jobs:
             api flask --app src.app:create_app seed-test-data \
             || echo "Seed not available, skipping"
 
-      - name: Run unit tests
-        working-directory: vbwd-backend
-        run: |
-          docker compose run --rm test \
-            pytest tests/unit/ plugins/ --ignore=tests/integration \
-            -v --tb=short --junit-xml=test-results/backend-unit-tests.xml
-
-      - name: Run integration tests
+      - name: Run integration tests via pre-commit-check
         working-directory: vbwd-backend
         run: |
           docker compose --profile test-integration run --rm test-integration \
-            pytest tests/integration/ \
-            -v --tb=short --junit-xml=test-results/backend-integration-tests.xml
-        continue-on-error: true
+            ./bin/pre-commit-check.sh --integration
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-test-results
+          name: backend-integration-results
           path: vbwd-backend/test-results/
           retention-days: 7
 
@@ -90,58 +154,112 @@ jobs:
         working-directory: vbwd-backend
         run: docker compose down -v
 
-  # ============================================
-  # Job 2: Frontend Tests (Dockerfile.test)
-  # Runs in parallel with backend-tests
-  # ============================================
-  frontend-tests:
-    name: Frontend Tests (Lint + Unit)
+  # ============================================================
+  # Job 4: Frontend User — Unit Tests (needs: install)
+  # ============================================================
+  fe-user-unit:
+    name: FE User — Unit Tests
     runs-on: ubuntu-latest
+    needs: install
     timeout-minutes: 20
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Clone frontend repos with submodules
+      - name: Clone vbwd-fe-user with submodules
         run: |
           git clone --branch main --recurse-submodules \
             https://github.com/dantweb/vbwd-fe-user.git vbwd-fe-user
-          git clone --branch main --recurse-submodules \
-            https://github.com/dantweb/vbwd-fe-admin.git vbwd-fe-admin
 
-      - name: Build vbwd-fe-user CI image
+      - name: Build CI image
         working-directory: vbwd-fe-user
         run: docker build -f Dockerfile.test -t vbwd-fe-user-ci .
 
-      - name: Build vbwd-fe-admin CI image
+      - name: Run unit tests via pre-commit-check
+        run: docker run --rm vbwd-fe-user-ci ./bin/pre-commit-check.sh --unit
+
+  # ============================================================
+  # Job 5: Frontend Admin — Unit Tests (needs: install)
+  # ============================================================
+  fe-admin-unit:
+    name: FE Admin — Unit Tests
+    runs-on: ubuntu-latest
+    needs: install
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Clone vbwd-fe-admin with submodules
+        run: |
+          git clone --branch main --recurse-submodules \
+            https://github.com/dantweb/vbwd-fe-admin.git vbwd-fe-admin
+
+      - name: Build CI image
         working-directory: vbwd-fe-admin
         run: docker build -f Dockerfile.test -t vbwd-fe-admin-ci .
 
-      - name: Lint vbwd-fe-user
-        run: docker run --rm vbwd-fe-user-ci npm run lint
-        continue-on-error: true
+      - name: Run unit tests via pre-commit-check
+        run: docker run --rm vbwd-fe-admin-ci ./bin/pre-commit-check.sh --unit
 
-      - name: Test vbwd-fe-user
-        run: docker run --rm vbwd-fe-user-ci npm run test
-        continue-on-error: true
-
-      - name: Lint vbwd-fe-admin
-        run: docker run --rm vbwd-fe-admin-ci npm run lint
-        continue-on-error: true
-
-      - name: Test vbwd-fe-admin
-        run: docker run --rm vbwd-fe-admin-ci npm run test
-        continue-on-error: true
-
-  # ============================================
-  # Job 3: E2E Tests (Playwright)
-  # Runs after both backend and frontend pass
-  # ============================================
-  e2e-tests:
-    name: E2E Tests (Playwright)
+  # ============================================================
+  # Job 6: Frontend Core — Unit Tests (needs: install)
+  # ============================================================
+  fe-core-unit:
+    name: FE Core — Unit Tests
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests]
+    needs: install
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Clone vbwd-fe-core
+        run: git clone --branch main https://github.com/dantweb/vbwd-fe-core.git vbwd-fe-core
+
+      - name: Build CI image
+        working-directory: vbwd-fe-core
+        run: docker build -f Dockerfile.test -t vbwd-fe-core-ci .
+
+      - name: Run unit tests via pre-commit-check
+        run: docker run --rm vbwd-fe-core-ci ./bin/pre-commit-check.sh --unit
+
+  # ============================================================
+  # Job 7: Frontend Admin — Integration Tests (needs: fe-admin-unit)
+  # ============================================================
+  fe-admin-integration:
+    name: FE Admin — Integration Tests
+    runs-on: ubuntu-latest
+    needs: fe-admin-unit
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Clone vbwd-fe-admin with submodules
+        run: |
+          git clone --branch main --recurse-submodules \
+            https://github.com/dantweb/vbwd-fe-admin.git vbwd-fe-admin
+
+      - name: Build CI image
+        working-directory: vbwd-fe-admin
+        run: docker build -f Dockerfile.test -t vbwd-fe-admin-ci .
+
+      - name: Run integration tests via pre-commit-check
+        run: docker run --rm vbwd-fe-admin-ci ./bin/pre-commit-check.sh --integration
+        continue-on-error: true
+
+  # ============================================================
+  # Job 8: E2E Playwright Tests (needs: 3, 4, 5, 6)
+  # ============================================================
+  e2e:
+    name: E2E — Playwright Tests
+    runs-on: ubuntu-latest
+    needs: [backend-integration, fe-user-unit, fe-admin-unit, fe-core-unit]
     timeout-minutes: 30
 
     steps:
@@ -173,13 +291,13 @@ jobs:
       - name: Run database migrations and seed data
         working-directory: vbwd-backend
         run: |
-          docker compose exec -T api flask --app src.app:create_app db upgrade
+          docker compose exec -T api alembic upgrade head
           docker compose exec -T \
             -e TEST_DATA_SEED=true \
             api flask --app src.app:create_app seed-test-data \
             || echo "Seed not available"
 
-      - name: Build vbwd-fe-user CI image (with Playwright)
+      - name: Build fe-user CI image (includes Playwright)
         working-directory: vbwd-fe-user
         run: docker build -f Dockerfile.test -t vbwd-fe-user-ci .
 
@@ -206,13 +324,13 @@ jobs:
         working-directory: vbwd-backend
         run: docker compose down -v
 
-  # ============================================
-  # Job 4: Test Summary
-  # ============================================
+  # ============================================================
+  # Test Summary
+  # ============================================================
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests, e2e-tests]
+    needs: [install, backend-unit, backend-integration, fe-user-unit, fe-admin-unit, fe-core-unit, fe-admin-integration, e2e]
     if: always()
 
     steps:
@@ -223,17 +341,25 @@ jobs:
           echo "=================================="
           echo ""
           echo "Job Results:"
-          echo "  Backend Tests:     ${{ needs.backend-tests.result }}"
-          echo "  Frontend Tests:    ${{ needs.frontend-tests.result }}"
-          echo "  E2E Tests:         ${{ needs.e2e-tests.result }}"
+          echo "  1. Install:                ${{ needs.install.result }}"
+          echo "  2. Backend Unit:           ${{ needs.backend-unit.result }}"
+          echo "  3. Backend Integration:    ${{ needs.backend-integration.result }}"
+          echo "  4. FE User Unit:           ${{ needs.fe-user-unit.result }}"
+          echo "  5. FE Admin Unit:          ${{ needs.fe-admin-unit.result }}"
+          echo "  6. FE Core Unit:           ${{ needs.fe-core-unit.result }}"
+          echo "  7. FE Admin Integration:   ${{ needs.fe-admin-integration.result }}"
+          echo "  8. E2E Playwright:         ${{ needs.e2e.result }}"
           echo ""
 
       - name: Verify overall status
         run: |
-          if [ "${{ needs.backend-tests.result }}" = "failure" ] || \
-             [ "${{ needs.frontend-tests.result }}" = "failure" ] || \
-             [ "${{ needs.e2e-tests.result }}" = "failure" ]; then
-            echo "Some tests failed. Check individual job logs."
+          if [ "${{ needs.install.result }}" = "failure" ] || \
+             [ "${{ needs.backend-unit.result }}" = "failure" ] || \
+             [ "${{ needs.backend-integration.result }}" = "failure" ] || \
+             [ "${{ needs.fe-user-unit.result }}" = "failure" ] || \
+             [ "${{ needs.fe-admin-unit.result }}" = "failure" ] || \
+             [ "${{ needs.fe-core-unit.result }}" = "failure" ]; then
+            echo "Core tests failed. Check individual job logs."
             exit 1
           fi
-          echo "All tests passed!"
+          echo "All core tests passed!"
