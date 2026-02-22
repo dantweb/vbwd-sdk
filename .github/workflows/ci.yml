@@ -97,24 +97,24 @@ jobs:
         run: |
           docker run --rm --network host \
             -e PYTHONPATH=/app \
-            -e DATABASE_URL=postgresql://vbwd:vbwd@localhost:5432/vbwd \
-            -e REDIS_URL=redis://localhost:6379/1 \
+            -e DATABASE_URL=postgresql://vbwd:vbwd@127.0.0.1:5432/vbwd \
+            -e REDIS_URL=redis://127.0.0.1:6379/1 \
             -e FLASK_ENV=testing \
             -v $(pwd):/app \
             vbwd-backend-test \
             alembic upgrade head
 
-      - name: Run unit tests via pre-commit-check
+      - name: Run unit tests
         working-directory: vbwd-backend
         run: |
           docker run --rm --network host \
             -e PYTHONPATH=/app \
-            -e DATABASE_URL=postgresql://vbwd:vbwd@localhost:5432/vbwd \
-            -e REDIS_URL=redis://localhost:6379/1 \
+            -e DATABASE_URL=postgresql://vbwd:vbwd@127.0.0.1:5432/vbwd \
+            -e REDIS_URL=redis://127.0.0.1:6379/1 \
             -e FLASK_ENV=testing \
             -v $(pwd):/app \
             vbwd-backend-test \
-            ./bin/pre-commit-check.sh --unit
+            pytest tests/unit/ -q --tb=short
 
       - name: Upload test results
         if: always()
