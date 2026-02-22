@@ -195,14 +195,14 @@ jobs:
           echo "Plugin status:"
           echo "$PLUGINS" | jq -r '.plugins[] | "  \(.name): \(.status)"'
 
-          # Verify expected plugins are enabled
+          # Verify expected plugins are active
           FAILED=0
           for plugin in analytics stripe paypal taro chat yookassa; do
             STATUS=$(echo "$PLUGINS" | jq -r ".plugins[] | select(.name==\"$plugin\") | .status")
-            if [ "$STATUS" = "enabled" ]; then
+            if [ "$STATUS" = "active" ]; then
               echo "✓ $plugin"
             else
-              echo "✗ $plugin NOT enabled (status: $STATUS)"
+              echo "✗ $plugin NOT active (status: $STATUS)"
               FAILED=1
             fi
           done
