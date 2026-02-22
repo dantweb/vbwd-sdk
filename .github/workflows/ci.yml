@@ -177,7 +177,9 @@ jobs:
       - name: Run integration tests via pre-commit-check
         working-directory: vbwd-backend
         run: |
-          docker compose --profile test-integration run --rm test-integration \
+          docker compose --profile test-integration run --rm \
+            -e SKIP_LLM_TESTS=1 \
+            test-integration \
             ./bin/pre-commit-check.sh --integration
 
       - name: Upload test results
