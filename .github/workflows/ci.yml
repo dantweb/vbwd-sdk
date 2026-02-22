@@ -51,6 +51,32 @@ jobs:
     needs: install
     timeout-minutes: 20
 
+    # Use GH Actions services so localhost:5432 resolves correctly
+    # (some plugin tests hardcode localhost instead of reading DATABASE_URL)
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vbwd
+          POSTGRES_PASSWORD: vbwd
+          POSTGRES_DB: vbwd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -62,14 +88,32 @@ jobs:
         working-directory: vbwd-backend
         run: cp .env.example .env
 
+      - name: Build test image
+        working-directory: vbwd-backend
+        run: docker compose build test
+
       - name: Run database migrations
         working-directory: vbwd-backend
-        run: docker compose run --rm test alembic upgrade head
+        run: |
+          docker run --rm --network host \
+            -e PYTHONPATH=/app \
+            -e DATABASE_URL=postgresql://vbwd:vbwd@localhost:5432/vbwd \
+            -e REDIS_URL=redis://localhost:6379/1 \
+            -e FLASK_ENV=testing \
+            -v $(pwd):/app \
+            vbwd-backend-test \
+            alembic upgrade head
 
       - name: Run unit tests via pre-commit-check
         working-directory: vbwd-backend
         run: |
-          docker compose run --rm test \
+          docker run --rm --network host \
+            -e PYTHONPATH=/app \
+            -e DATABASE_URL=postgresql://vbwd:vbwd@localhost:5432/vbwd \
+            -e REDIS_URL=redis://localhost:6379/1 \
+            -e FLASK_ENV=testing \
+            -v $(pwd):/app \
+            vbwd-backend-test \
             ./bin/pre-commit-check.sh --unit
 
       - name: Upload test results
@@ -79,11 +123,6 @@ jobs:
           name: backend-unit-results
           path: vbwd-backend/test-results/
           retention-days: 7
-
-      - name: Stop services
-        if: always()
-        working-directory: vbwd-backend
-        run: docker compose down -v
 
   # ============================================================
   # Job 3: Backend Integration Tests (needs: backend-unit)
