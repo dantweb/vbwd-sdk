@@ -12,7 +12,7 @@ npm-install:
 
 # Start all containers (backend + frontend)
 up:
-	cd vbwd-backend && docker compose up -d --build
+	cd vbwd-backend && docker compose up api postgres -d --build
 	cd vbwd-fe-user && docker compose build dev nginx --no-cache && docker compose up dev nginx -d
 	cd vbwd-fe-admin && docker compose build dev nginx --no-cache && docker compose up dev nginx -d
 	@echo "All services started"
@@ -24,15 +24,17 @@ rebuild-backend:
 
 # Rebuild and restart only the admin frontend
 rebuild-admin:
+	cd vbwd-fe-admin && npm install
 	cd vbwd-fe-admin && npm run build
-	cd vbwd-fe-admin && docker compose down
+	cd vbwd-fe-admin && docker compose down -v
 	cd vbwd-fe-admin && docker compose build dev nginx --no-cache
 	cd vbwd-fe-admin && docker compose up dev nginx -d
 	@echo "Admin frontend rebuilt and restarted at http://localhost:8081"
 
 rebuild-user:
+	cd vbwd-fe-admin && npm install
 	cd vbwd-fe-user && npm run build
-	cd vbwd-fe-user && docker compose down
+	cd vbwd-fe-user && docker compose down -v
 	cd vbwd-fe-user && docker compose build dev nginx --no-cache
 	cd vbwd-fe-user && docker compose up dev nginx -d
 	@echo "User frontend rebuilt and restarted at http://localhost:8080"
@@ -42,8 +44,8 @@ rebuild-core:
 
 # Stop all containers
 down:
-	cd vbwd-fe-admin && docker compose down nginx dev 2>/dev/null || true
-	cd vbwd-fe-user && docker compose down nginx dev 2>/dev/null || true
+	cd vbwd-fe-admin && docker compose down nginx dev -v
+	cd vbwd-fe-user && docker compose down nginx dev -v
 	cd vbwd-backend && docker compose down
 	@echo "All services stopped"
 
@@ -54,11 +56,11 @@ be-logs:
 # Show status of all containers
 ps:
 	@echo "=== Backend ===" && cd vbwd-backend && docker compose ps
-	@echo "=== Frontend User ===" && cd vbwd-frontend/user && docker compose ps 2>/dev/null || true
-	@echo "=== Frontend Admin ===" && cd vbwd-frontend/admin && docker compose ps 2>/dev/null || true
+	@echo "=== Frontend User ===" && cd vbwd-fe-user && docker compose ps
+	@echo "=== Frontend Admin ===" && cd vbwd-fe-admin && docker compose ps
 
 migrations:
-	cd vbwd-backend && docker-compose exec api alembic upgrade head
+	cd vbwd-backend && docker compose exec api alembic upgrade head
 
 reset-db:
 	cd vbwd-backend && ./bin/reset-database.sh
