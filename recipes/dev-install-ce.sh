@@ -3,7 +3,43 @@ set -e
 
 # VBWD Community Edition - Development Installation Script
 # Works for both local development and GitHub Actions
-# Usage: ./recipes/dev-install-ce.sh
+# Usage: ./recipes/dev-install-ce.sh [--domain <hostname>] [--ssl]
+# Or set VBWD_DOMAIN / VBWD_SSL env vars before running.
+#
+# Examples:
+#   ./recipes/dev-install-ce.sh                              # http://localhost
+#   ./recipes/dev-install-ce.sh --domain myapp.com          # http://myapp.com
+#   ./recipes/dev-install-ce.sh --domain myapp.com --ssl    # https://myapp.com
+#   VBWD_DOMAIN=myapp.com VBWD_SSL=1 ./recipes/dev-install-ce.sh
+
+# Parse arguments
+DOMAIN="${VBWD_DOMAIN:-localhost}"
+SSL="${VBWD_SSL:-0}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --domain)
+            DOMAIN="$2"
+            shift 2
+            ;;
+        --ssl)
+            SSL=1
+            shift
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Derive protocol prefixes from SSL flag
+if [ "$SSL" = "1" ]; then
+    HTTP="https"
+    WS="wss"
+else
+    HTTP="http"
+    WS="ws"
+fi
 
 echo "=========================================="
 echo "VBWD CE Development Environment Setup"
@@ -263,11 +299,14 @@ echo "Setting up environment files for frontend apps..."
 for FE_DIR in "$FE_USER_DIR" "$FE_ADMIN_DIR"; do
     FE_NAME=$(basename "$FE_DIR")
     if [ ! -f "$FE_DIR/.env" ]; then
-        cat > "$FE_DIR/.env" << 'EOF'
-VITE_API_URL=http://localhost:5000
-VITE_WS_URL=ws://localhost:5000
+        # VITE_API_URL is a relative path so it works via the nginx proxy on any domain.
+        # VITE_BACKEND_URL is the Vite dev-server proxy target (only used by `npm run dev`).
+        cat > "$FE_DIR/.env" << EOF
+VITE_API_URL=/api/v1
+VITE_BACKEND_URL=${HTTP}://${DOMAIN}:5000
+VITE_WS_URL=${WS}://${DOMAIN}:5000
 EOF
-        echo "✓ Environment file created for $FE_NAME"
+        echo "✓ Environment file created for $FE_NAME (domain: $DOMAIN)"
     fi
 done
 
@@ -299,8 +338,8 @@ echo "Waiting for services to start..."
 sleep 5
 
 # Check backend health
-if wait_for_service "Backend API" "http://localhost:5000/api/v1/health" 60; then
-    echo "Backend API is running on http://localhost:5000"
+if wait_for_service "Backend API" "${HTTP}://${DOMAIN}:5000/api/v1/health" 60; then
+    echo "Backend API is running on ${HTTP}://${DOMAIN}:5000"
 else
     echo "ERROR: Backend API failed to start"
     echo "Checking backend logs..."
@@ -389,10 +428,10 @@ echo "Installation Complete!"
 echo "=========================================="
 echo ""
 echo "Services:"
-echo "  - Backend API:          http://localhost:5000"
-echo "  - Frontend (User app):  http://localhost:$FE_USER_PORT"
-echo "  - Frontend (Admin app): http://localhost:$FE_ADMIN_PORT"
-echo "  - Database:             postgresql://vbwd:vbwd@localhost:5432/vbwd"
+echo "  - Backend API:          ${HTTP}://${DOMAIN}:5000"
+echo "  - Frontend (User app):  ${HTTP}://${DOMAIN}:$FE_USER_PORT"
+echo "  - Frontend (Admin app): ${HTTP}://${DOMAIN}:$FE_ADMIN_PORT"
+echo "  - Database:             postgresql://vbwd:vbwd@${DOMAIN}:5432/vbwd"
 echo ""
 echo "Repository Structure:"
 echo "  - Backend:    $BACKEND_DIR"
