@@ -262,7 +262,7 @@ jobs:
           echo "Checking API health..."
           for i in $(seq 1 10); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              http://${{ secrets.LOOPAI_SERVER2_IP }}:5000/api/v1/health || echo "000")
+              https://${{ secrets.LOOPAI_SERVER2_IP }}:5000/api/v1/health || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "API is healthy (HTTP $STATUS)"
               exit 0
@@ -276,13 +276,13 @@ jobs:
       - name: Check User frontend
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://${{ secrets.LOOPAI_SERVER2_IP }}:8080/ || echo "000")
+            https://${{ secrets.LOOPAI_SERVER2_IP }}:8080/ || echo "000")
           echo "User frontend HTTP $STATUS"
           [ "$STATUS" = "200" ] || { echo "User frontend not accessible"; exit 1; }
 
       - name: Check Admin frontend
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://${{ secrets.LOOPAI_SERVER2_IP }}:8081/admin/ || echo "000")
+            https://hw:8081/admin/ || echo "000")
           echo "Admin frontend HTTP $STATUS"
           [ "$STATUS" = "200" ] || { echo "Admin frontend not accessible"; exit 1; }

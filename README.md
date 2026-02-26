@@ -5,6 +5,27 @@
 ## Quick Start
 
 ```bash
+# VBWD Community Edition - Development Installation Script
+# Works for both local development and GitHub Actions
+# Usage: ./recipes/dev-install-ce.sh [--domain <hostname>] [--ssl]
+
+Or set VBWD_DOMAIN / VBWD_SSL env vars before running.
+
+# installtion with script
+
+Examples:
+
+./recipes/dev-install-ce.sh                              # http://localhost
+./recipes/dev-install-ce.sh --domain myapp.com          # http://myapp.com
+./recipes/dev-install-ce.sh --domain myapp.com --ssl    # https://myapp.com
+VBWD_DOMAIN=myapp.com VBWD_SSL=1 ./recipes/dev-install-ce.sh
+```
+
+This should be enough.
+
+After install use Makefile commands when you need.
+
+```bash
 # Backend
 cd vbwd-backend && make up && make test
 
