@@ -1,0 +1,288 @@
+name: VBWD CE - Deploy
+
+on:
+  # Trigger only after CI pipeline completes on the production branch
+  workflow_run:
+    workflows: ["VBWD CE - CI/CD Pipeline"]
+    branches:
+      - production
+    types:
+      - completed
+  # Allow manual trigger (skips CI gate check)
+  workflow_dispatch:
+
+# ============================================================
+# Secrets required:
+#
+#  Shared with loopai (same server):
+#    LOOPAI_SERVER2_IP            — server IP address
+#    SERVER_USERNAME              — SSH user on the server
+#    LOOPAI_SERVER2_IP_SSH_PRIVATE_KEY — SSH private key
+#    DANTWEB_DEPLOY_TOKEN         — GitHub PAT for GHCR + private repo clones
+#
+#  VBWD-specific (set once in repo settings):
+#    VBWD_DB_PASSWORD             — PostgreSQL password on the server
+#    VBWD_JWT_SECRET              — JWT signing key
+#    VBWD_FLASK_SECRET            — Flask secret key
+#
+# Server-side prerequisite:
+#   /home/<SERVER_USERNAME>/web_server/vbwd_app/docker-compose.yaml
+#   must exist and reference the GHCR images built here.
+#   See docs/architecture_core_server_ce/README.md for an example.
+# ============================================================
+
+jobs:
+  # ============================================================
+  # Gate: abort if CI pipeline did not succeed
+  # Passes through for workflow_dispatch (manual runs).
+  # ============================================================
+
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: CI is green
+        run: echo "CI pipeline passed — proceeding with deploy."
+
+  # ============================================================
+  # Build jobs run in parallel
+  # ============================================================
+
+  build-backend:
+    name: Build — Backend
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Set up Git credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
+
+      - name: Clone vbwd-backend (production branch)
+        run: git clone --branch production https://github.com/dantweb/vbwd-backend.git vbwd-backend
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.DANTWEB_DEPLOY_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: vbwd-backend
+          file: vbwd-backend/container/python/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/vbwd_backend:latest
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+  build-fe-user:
+    name: Build — FE User
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Set up Git credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
+
+      - name: Clone vbwd-fe-user with submodules (production branch)
+        run: |
+          git clone --branch production --recurse-submodules \
+            https://github.com/dantweb/vbwd-fe-user.git vbwd-fe-user
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.DANTWEB_DEPLOY_TOKEN }}
+
+      - name: Build and push fe-user image
+        uses: docker/build-push-action@v5
+        with:
+          context: vbwd-fe-user
+          file: vbwd-fe-user/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/vbwd_fe_user:latest
+          cache-from: type=gha,scope=fe-user
+          cache-to: type=gha,mode=max,scope=fe-user
+
+  build-fe-admin:
+    name: Build — FE Admin
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Set up Git credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
+
+      - name: Clone vbwd-fe-admin with submodules (production branch)
+        run: |
+          git clone --branch production --recurse-submodules \
+            https://github.com/dantweb/vbwd-fe-admin.git vbwd-fe-admin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.DANTWEB_DEPLOY_TOKEN }}
+
+      - name: Build and push fe-admin image
+        uses: docker/build-push-action@v5
+        with:
+          context: vbwd-fe-admin
+          file: vbwd-fe-admin/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/vbwd_fe_admin:latest
+          cache-from: type=gha,scope=fe-admin
+          cache-to: type=gha,mode=max,scope=fe-admin
+
+  # ============================================================
+  # Deploy (needs all 3 builds)
+  # ============================================================
+
+  deploy:
+    name: Deploy to Server
+    needs: [build-backend, build-fe-user, build-fe-admin]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.DANTWEB_DEPLOY_TOKEN }}
+
+      - name: Pull images and restart on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LOOPAI_SERVER2_IP }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.LOOPAI_SERVER2_IP_SSH_PRIVATE_KEY }}
+          timeout: 60s
+          command_timeout: 15m
+          script: |
+            set -e
+            cd /home/${{ secrets.SERVER_USERNAME }}/web_server/vbwd_app
+
+            # Log in to GHCR on the server
+            echo "${{ secrets.DANTWEB_DEPLOY_TOKEN }}" | \
+              docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull all images in parallel
+            echo "Pulling images..."
+            docker compose pull vbwd_backend &
+            PID_BACKEND=$!
+            docker compose pull vbwd_fe_user &
+            PID_FE_USER=$!
+            docker compose pull vbwd_fe_admin &
+            PID_FE_ADMIN=$!
+
+            wait $PID_BACKEND  || { echo "Failed to pull vbwd_backend";  exit 1; }
+            wait $PID_FE_USER  || { echo "Failed to pull vbwd_fe_user";  exit 1; }
+            wait $PID_FE_ADMIN || { echo "Failed to pull vbwd_fe_admin"; exit 1; }
+
+            echo "Images pulled. Running migrations..."
+            docker compose run --rm vbwd_backend alembic upgrade head
+
+            echo "Restarting containers..."
+            docker compose up -d --remove-orphans --no-deps --force-recreate
+
+            echo "Cleaning up unused Docker resources..."
+            docker container prune -f
+            docker image prune -f
+
+            echo "Deploy complete."
+
+  # ============================================================
+  # Verify
+  # ============================================================
+
+  verify:
+    name: Verify Deployment
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check all containers are running
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LOOPAI_SERVER2_IP }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.LOOPAI_SERVER2_IP_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /home/${{ secrets.SERVER_USERNAME }}/web_server/vbwd_app
+
+            RUNNING=$(docker compose ps --filter "status=running" | grep -c "Up" || true)
+            TOTAL=$(docker compose config --services | wc -l)
+
+            echo "Running: $RUNNING / Total: $TOTAL"
+
+            if [ "$RUNNING" -lt "$TOTAL" ]; then
+              echo "Not all containers running:"
+              docker compose ps
+              docker compose up -d
+              exit 1
+            fi
+
+            echo "All containers running."
+
+      - name: Check API health
+        run: |
+          echo "Checking API health..."
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://${{ secrets.LOOPAI_SERVER2_IP }}:5000/api/v1/health || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "API is healthy (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS, retrying..."
+            sleep 3
+          done
+          echo "API health check failed"
+          exit 1
+
+      - name: Check User frontend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://${{ secrets.LOOPAI_SERVER2_IP }}:8080/ || echo "000")
+          echo "User frontend HTTP $STATUS"
+          [ "$STATUS" = "200" ] || { echo "User frontend not accessible"; exit 1; }
+
+      - name: Check Admin frontend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://${{ secrets.LOOPAI_SERVER2_IP }}:8081/admin/ || echo "000")
+          echo "Admin frontend HTTP $STATUS"
+          [ "$STATUS" = "200" ] || { echo "Admin frontend not accessible"; exit 1; }
