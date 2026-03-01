@@ -286,3 +286,4 @@ jobs:
             https://hw:8081/admin/ || echo "000")
           echo "Admin frontend HTTP $STATUS"
           [ "$STATUS" = "200" ] || { echo "Admin frontend not accessible"; exit 1; }
+
