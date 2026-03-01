@@ -1,7 +1,7 @@
 name: VBWD CE - Deploy
 
 on:
-  # Trigger only after CI pipeline completes on the production branch
+  # Trigger only after CI pipeline completes on the branch defined in DEPLOY_BRANCH below
   workflow_run:
     workflows: ["VBWD CE - CI/CD Pipeline"]
     branches:
@@ -12,18 +12,34 @@ on:
   workflow_dispatch:
 
 # ============================================================
+# Branch configuration — change these to deploy from a different branch
+# Note: workflow_run.branches filter above must be kept in sync manually
+# ============================================================
+env:
+  BACKEND_BRANCH:  main
+  FE_USER_BRANCH:  main
+  FE_ADMIN_BRANCH: main
+
+# ============================================================
 # Secrets required:
 #
 #  Shared with loopai (same server):
 #    LOOPAI_SERVER2_IP            — server IP address
 #    SERVER_USERNAME              — SSH user on the server
 #    LOOPAI_SERVER2_IP_SSH_PRIVATE_KEY — SSH private key
-#    DANTWEB_DEPLOY_TOKEN         — GitHub PAT for GHCR + private repo clones
+#    DANTWEB_DEPLOY_TOKEN         — GitHub PAT (repo + packages:read) used for:
+#                                    • git clone of private repos in build jobs
+#                                    • docker pull on the production server
 #
 #  VBWD-specific (set once in repo settings):
 #    VBWD_DB_PASSWORD             — PostgreSQL password on the server
 #    VBWD_JWT_SECRET              — JWT signing key
 #    VBWD_FLASK_SECRET            — Flask secret key
+#
+# Note: GHCR login inside GitHub Actions uses the auto-provisioned
+#       github.token (packages: write permission granted below).
+#       DANTWEB_DEPLOY_TOKEN is only needed for private repo git clone
+#       and for the production server's docker pull.
 #
 # Server-side prerequisite:
 #   /home/<SERVER_USERNAME>/web_server/vbwd_app/docker-compose.yaml
@@ -56,6 +72,9 @@ jobs:
     needs: ci-gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Set up Git credentials
@@ -63,8 +82,8 @@ jobs:
           git config --global credential.helper store
           echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
 
-      - name: Clone vbwd-backend (production branch)
-        run: git clone --branch main https://github.com/dantweb/vbwd-backend.git vbwd-backend
+      - name: Clone vbwd-backend
+        run: git clone --branch ${{ env.BACKEND_BRANCH }} https://github.com/dantweb/vbwd-backend.git vbwd-backend
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -74,7 +93,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.DANTWEB_DEPLOY_TOKEN }}
+          password: ${{ github.token }}
 
       - name: Build and push backend image
         uses: docker/build-push-action@v5
@@ -92,6 +111,9 @@ jobs:
     needs: ci-gate
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Set up Git credentials
@@ -99,9 +121,9 @@ jobs:
           git config --global credential.helper store
           echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
 
-      - name: Clone vbwd-fe-user with submodules (main branch)
+      - name: Clone vbwd-fe-user with submodules
         run: |
-          git clone --branch main --recurse-submodules \
+          git clone --branch ${{ env.FE_USER_BRANCH }} --recurse-submodules \
             https://github.com/dantweb/vbwd-fe-user.git vbwd-fe-user
 
       - name: Set up Docker Buildx
@@ -112,7 +134,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.DANTWEB_DEPLOY_TOKEN }}
+          password: ${{ github.token }}
 
       - name: Build and push fe-user image
         uses: docker/build-push-action@v5
@@ -130,6 +152,9 @@ jobs:
     needs: ci-gate
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Set up Git credentials
@@ -137,9 +162,9 @@ jobs:
           git config --global credential.helper store
           echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
 
-      - name: Clone vbwd-fe-admin with submodules (main branch)
+      - name: Clone vbwd-fe-admin with submodules
         run: |
-          git clone --branch nain --recurse-submodules \
+          git clone --branch ${{ env.FE_ADMIN_BRANCH }} --recurse-submodules \
             https://github.com/dantweb/vbwd-fe-admin.git vbwd-fe-admin
 
       - name: Set up Docker Buildx
@@ -150,7 +175,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.DANTWEB_DEPLOY_TOKEN }}
+          password: ${{ github.token }}
 
       - name: Build and push fe-admin image
         uses: docker/build-push-action@v5
@@ -174,13 +199,6 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.DANTWEB_DEPLOY_TOKEN }}
-
       - name: Pull images and restart on server
         uses: appleboy/ssh-action@v1.0.3
         with:
