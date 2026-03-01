@@ -64,7 +64,7 @@ jobs:
           echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
 
       - name: Clone vbwd-backend (production branch)
-        run: git clone --branch production https://github.com/dantweb/vbwd-backend.git vbwd-backend
+        run: git clone --branch main https://github.com/dantweb/vbwd-backend.git vbwd-backend
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -99,9 +99,9 @@ jobs:
           git config --global credential.helper store
           echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
 
-      - name: Clone vbwd-fe-user with submodules (production branch)
+      - name: Clone vbwd-fe-user with submodules (main branch)
         run: |
-          git clone --branch production --recurse-submodules \
+          git clone --branch main --recurse-submodules \
             https://github.com/dantweb/vbwd-fe-user.git vbwd-fe-user
 
       - name: Set up Docker Buildx
@@ -137,9 +137,9 @@ jobs:
           git config --global credential.helper store
           echo "https://${{ github.actor }}:${{ secrets.DANTWEB_DEPLOY_TOKEN }}@github.com" > ~/.git-credentials
 
-      - name: Clone vbwd-fe-admin with submodules (production branch)
+      - name: Clone vbwd-fe-admin with submodules (main branch)
         run: |
-          git clone --branch production --recurse-submodules \
+          git clone --branch nain --recurse-submodules \
             https://github.com/dantweb/vbwd-fe-admin.git vbwd-fe-admin
 
       - name: Set up Docker Buildx
