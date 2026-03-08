@@ -1,0 +1,96 @@
+{
+  "type": "cms_widget",
+  "version": 1,
+  "data": {
+    "slug": "burger-nav",
+    "name": "Navigation — Mobile-First Burger Menu",
+    "widget_type": "menu",
+    "sort_order": 5,
+    "is_active": true,
+    "config": null,
+    "content_json": null,
+    "source_css": "/* ============================================================\n   Burger Nav — mobile-first multilevel menu\n   Works with CmsWidgetRenderer menu template.\n   Desktop: horizontal nav with hover dropdown.\n   Mobile (<768px): slide-in drawer with burger toggle + accordion submenus.\n   ============================================================ */\n\n/* ── Wrapper ─────────────────────────────────────────────── */\n.cms-widget--menu {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0 1.5rem;\n  min-height: 56px;\n  position: relative;\n  z-index: 200;\n}\n\n/* ── Desktop: horizontal menu ────────────────────────────── */\n.cms-menu {\n  display: flex;\n  flex-direction: row;\n  align-items: center;\n  gap: 0;\n  padding: 0;\n  margin: 0;\n}\n\n.cms-menu__item {\n  position: relative;\n}\n\n.cms-menu__link {\n  display: flex;\n  align-items: center;\n  gap: 0.3rem;\n  padding: 0.6rem 1rem;\n  color: inherit;\n  text-decoration: none;\n  font-weight: 500;\n  font-size: 0.95rem;\n  white-space: nowrap;\n  transition: color 0.15s;\n}\n\n.cms-menu__link:hover {\n  color: var(--color-primary, #2563eb);\n}\n\n.cms-menu__arrow {\n  font-size: 0.75rem;\n  opacity: 0.6;\n  transition: transform 0.2s;\n  display: inline-block;\n}\n\n.cms-menu__arrow--open {\n  transform: rotate(180deg);\n}\n\n/* Dropdown sub-menu (desktop hover) */\n.cms-menu__sub {\n  display: none;\n  position: absolute;\n  top: calc(100% + 4px);\n  left: 0;\n  background: var(--color-surface, #ffffff);\n  border: 1px solid var(--color-border, #e2e8f0);\n  border-radius: 8px;\n  padding: 0.375rem 0;\n  min-width: 180px;\n  z-index: 300;\n  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);\n  list-style: none;\n}\n\n.cms-menu__item--has-children:hover > .cms-menu__sub {\n  display: block;\n}\n\n.cms-menu__sub .cms-menu__link {\n  padding: 0.45rem 1rem;\n  font-size: 0.9rem;\n  font-weight: 400;\n}\n\n.cms-menu__sub .cms-menu__link:hover {\n  background: var(--color-surface, #f8fafc);\n}\n\n/* ── Burger button (hidden on desktop) ───────────────────── */\n.cms-burger {\n  display: none;\n  flex-direction: column;\n  justify-content: center;\n  gap: 5px;\n  width: 40px;\n  height: 40px;\n  padding: 6px;\n  background: transparent;\n  border: none;\n  cursor: pointer;\n  border-radius: 6px;\n  z-index: 400;\n  flex-shrink: 0;\n}\n\n.cms-burger span {\n  display: block;\n  width: 100%;\n  height: 2px;\n  background: currentColor;\n  border-radius: 2px;\n  transition: transform 0.25s, opacity 0.25s;\n  transform-origin: center;\n}\n\n/* Animate to X when open */\n.cms-burger--open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }\n.cms-burger--open span:nth-child(2) { opacity: 0; transform: scaleX(0); }\n.cms-burger--open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }\n\n/* ── Overlay (mobile) ────────────────────────────────────── */\n.cms-menu-overlay {\n  display: none;\n  position: fixed;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.4);\n  z-index: 250;\n  backdrop-filter: blur(2px);\n  opacity: 0;\n  transition: opacity 0.25s;\n}\n\n/* ── Mobile breakpoint ───────────────────────────────────── */\n@media (max-width: 768px) {\n  /* Show burger button */\n  .cms-burger {\n    display: flex;\n  }\n\n  /* Show overlay when menu open */\n  .cms-menu-overlay--open {\n    display: block;\n    opacity: 1;\n  }\n\n  /* Full-height slide-in drawer from the right */\n  .cms-menu {\n    position: fixed;\n    top: 0;\n    right: -100%;\n    width: min(300px, 85vw);\n    height: 100dvh;\n    flex-direction: column;\n    align-items: stretch;\n    background: var(--color-bg, #ffffff);\n    padding: 4rem 0 2rem;\n    gap: 0;\n    overflow-y: auto;\n    z-index: 300;\n    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);\n  }\n\n  /* Open state: slide in */\n  .cms-menu--open {\n    right: 0;\n  }\n\n  .cms-menu__item {\n    position: static;\n    border-bottom: 1px solid var(--color-border, #e2e8f0);\n  }\n\n  .cms-menu__link {\n    padding: 0.875rem 1.5rem;\n    font-size: 1rem;\n    justify-content: space-between;\n  }\n\n  /* Sub-menus: accordion (shown/hidden via .cms-menu__sub--open) */\n  .cms-menu__sub {\n    position: static;\n    display: block;\n    max-height: 0;\n    overflow: hidden;\n    background: var(--color-surface, #f8fafc);\n    border: none;\n    border-radius: 0;\n    box-shadow: none;\n    padding: 0;\n    transition: max-height 0.25s ease;\n  }\n\n  /* Override the desktop :hover rule — on mobile use .--open class */\n  .cms-menu__item--has-children:hover > .cms-menu__sub {\n    display: block;\n    max-height: 0;\n  }\n\n  .cms-menu__sub--open {\n    max-height: 400px;\n  }\n\n  .cms-menu__sub .cms-menu__item {\n    border-bottom: 1px solid var(--color-border, #e2e8f0);\n  }\n\n  .cms-menu__sub .cms-menu__link {\n    padding-left: 2.5rem;\n    font-size: 0.95rem;\n    opacity: 0.85;\n  }\n}\n",
+    "menu_items": [
+      {
+        "id": "00000000-0000-0000-0000-a00000000001",
+        "parent_id": null,
+        "label": "Home",
+        "url": null,
+        "page_slug": "home1",
+        "target": "_self",
+        "icon": null,
+        "sort_order": 0
+      },
+      {
+        "id": "00000000-0000-0000-0000-a00000000002",
+        "parent_id": null,
+        "label": "Services",
+        "url": null,
+        "page_slug": "services",
+        "target": "_self",
+        "icon": null,
+        "sort_order": 1
+      },
+      {
+        "id": "00000000-0000-0000-0000-a00000000003",
+        "parent_id": null,
+        "label": "Products",
+        "url": "#",
+        "page_slug": null,
+        "target": "_self",
+        "icon": null,
+        "sort_order": 2
+      },
+      {
+        "id": "00000000-0000-0000-0000-a00000000004",
+        "parent_id": "00000000-0000-0000-0000-a00000000003",
+        "label": "Managed Hosting",
+        "url": "/services#hosting",
+        "page_slug": null,
+        "target": "_self",
+        "icon": null,
+        "sort_order": 0
+      },
+      {
+        "id": "00000000-0000-0000-0000-a00000000005",
+        "parent_id": "00000000-0000-0000-0000-a00000000003",
+        "label": "Custom Installation",
+        "url": "/services#install",
+        "page_slug": null,
+        "target": "_self",
+        "icon": null,
+        "sort_order": 1
+      },
+      {
+        "id": "00000000-0000-0000-0000-a00000000006",
+        "parent_id": "00000000-0000-0000-0000-a00000000003",
+        "label": "Plugin Development",
+        "url": "/services#plugins",
+        "page_slug": null,
+        "target": "_self",
+        "icon": null,
+        "sort_order": 2
+      },
+      {
+        "id": "00000000-0000-0000-0000-a00000000007",
+        "parent_id": null,
+        "label": "About",
+        "url": null,
+        "page_slug": "about",
+        "target": "_self",
+        "icon": null,
+        "sort_order": 3
+      },
+      {
+        "id": "00000000-0000-0000-0000-a00000000008",
+        "parent_id": null,
+        "label": "Contact",
+        "url": "/contact",
+        "page_slug": null,
+        "target": "_self",
+        "icon": null,
+        "sort_order": 4
+      }
+    ]
+  }
+}

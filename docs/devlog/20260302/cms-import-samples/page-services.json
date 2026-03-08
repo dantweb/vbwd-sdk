@@ -1,0 +1,74 @@
+[
+  {
+    "slug": "services",
+    "name": "Services",
+    "language": "en",
+    "is_published": true,
+    "sort_order": 30,
+    "meta_title": "Services — What We Offer",
+    "meta_description": "Explore our range of services. Fast setup, transparent pricing, and a team that cares.",
+    "meta_keywords": "services, pricing, team, development platform",
+    "og_title": "Services — What We Offer",
+    "og_description": "Explore our range of services. Fast setup, transparent pricing, and a team that cares.",
+    "og_image_url": null,
+    "canonical_url": null,
+    "robots": "index,follow",
+    "schema_json": null,
+    "use_theme_switcher_styles": false,
+    "layout_id": null,
+    "style_id": null,
+    "_import_note": "Set layout_id to the UUID of 'services-page' layout and style_id to your chosen theme UUID after importing them. Both can also be assigned in the admin page editor.",
+    "content_json": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": { "level": 1 },
+          "content": [{ "type": "text", "text": "What We Offer" }]
+        },
+        {
+          "type": "paragraph",
+          "content": [{ "type": "text", "text": "We build tools that remove friction from software delivery. Whether you need a subscription billing layer, a white-labelled member portal, or a self-hosted alternative to expensive SaaS, we have a solution that fits." }]
+        },
+        {
+          "type": "heading",
+          "attrs": { "level": 2 },
+          "content": [{ "type": "text", "text": "Managed Hosting" }]
+        },
+        {
+          "type": "paragraph",
+          "content": [{ "type": "text", "text": "We provision and manage your vbwd instance on dedicated infrastructure. Daily backups, uptime monitoring, SSL, and automatic updates included. Starting at €89/month." }]
+        },
+        {
+          "type": "heading",
+          "attrs": { "level": 2 },
+          "content": [{ "type": "text", "text": "Custom Installation" }]
+        },
+        {
+          "type": "paragraph",
+          "content": [{ "type": "text", "text": "We deploy vbwd on your own server or VPS with a custom domain plugin for your specific business workflow. One-time fee, you own everything. Starting at €1,500." }]
+        },
+        {
+          "type": "heading",
+          "attrs": { "level": 2 },
+          "content": [{ "type": "text", "text": "Plugin Development" }]
+        },
+        {
+          "type": "paragraph",
+          "content": [{ "type": "text", "text": "Need a vertical-specific feature? We build domain plugins that extend vbwd without touching the core — billing logic, reporting, integrations with your existing tools. Quoted per project." }]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Vet wellness plan management" }] }] },
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "WISP subscriber billing" }] }] },
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "WordPress membership bridge" }] }] },
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Payment gateway integrations (LiqPay, Monobank, Flutterwave)" }] }] }
+          ]
+        }
+      ]
+    },
+    "content_html": "<h1>What We Offer</h1>\n<p>We build tools that remove friction from software delivery. Whether you need a subscription billing layer, a white-labelled member portal, or a self-hosted alternative to expensive SaaS, we have a solution that fits.</p>\n<h2>Managed Hosting</h2>\n<p>We provision and manage your vbwd instance on dedicated infrastructure. Daily backups, uptime monitoring, SSL, and automatic updates included. Starting at &euro;89/month.</p>\n<h2>Custom Installation</h2>\n<p>We deploy vbwd on your own server or VPS with a custom domain plugin for your specific business workflow. One-time fee, you own everything. Starting at &euro;1,500.</p>\n<h2>Plugin Development</h2>\n<p>Need a vertical-specific feature? We build domain plugins that extend vbwd without touching the core — billing logic, reporting, integrations with your existing tools. Quoted per project.</p>\n<ul>\n  <li>Vet wellness plan management</li>\n  <li>WISP subscriber billing</li>\n  <li>WordPress membership bridge</li>\n  <li>Payment gateway integrations (LiqPay, Monobank, Flutterwave)</li>\n</ul>",
+    "source_css": ".services-intro { max-width: 720px; margin: 0 auto; }\n.services-intro h1 { font-size: clamp(1.75rem, 3vw, 2.5rem); margin-bottom: 1rem; }\n.services-intro h2 { font-size: 1.4rem; margin-top: 2.5rem; margin-bottom: 0.5rem; border-left: 4px solid var(--color-primary, #2563eb); padding-left: 0.75rem; }\n.services-intro ul { padding-left: 1.25rem; }\n.services-intro li { margin-bottom: 0.4rem; }"
+  }
+]

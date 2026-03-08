@@ -1,0 +1,16 @@
+{
+  "type": "cms_widget",
+  "version": 1,
+  "data": {
+    "slug": "newsletter-signup",
+    "name": "Newsletter — Email Signup",
+    "widget_type": "html",
+    "sort_order": 32,
+    "is_active": true,
+    "config": null,
+    "content_json": {
+      "content": "PHNlY3Rpb24gY2xhc3M9Im5ld3NsZXR0ZXIiPgogIDxkaXYgY2xhc3M9ImNvbnRhaW5lciI+CiAgICA8ZGl2IGNsYXNzPSJuZXdzbGV0dGVyX19pbm5lciI+CiAgICAgIDxoMj5TdGF5IGluIHRoZSBsb29wPC9oMj4KICAgICAgPHA+R2V0IHByb2R1Y3QgdXBkYXRlcywgdHV0b3JpYWxzLCBhbmQgZGV2ZWxvcGVyIHRpcHMg4oCUIG5vIHNwYW0sIHVuc3Vic2NyaWJlIGFueSB0aW1lLjwvcD4KICAgICAgPGZvcm0gY2xhc3M9Im5ld3NsZXR0ZXJfX2Zvcm0iIG9uc3VibWl0PSJyZXR1cm4gZmFsc2UiPgogICAgICAgIDxpbnB1dCB0eXBlPSJlbWFpbCIgY2xhc3M9Im5ld3NsZXR0ZXJfX2lucHV0IiBwbGFjZWhvbGRlcj0ieW91QGV4YW1wbGUuY29tIiAvPgogICAgICAgIDxidXR0b24gdHlwZT0ic3VibWl0IiBjbGFzcz0iYnRuIGJ0bi1wcmltYXJ5Ij5TdWJzY3JpYmU8L2J1dHRvbj4KICAgICAgPC9mb3JtPgogICAgICA8cCBjbGFzcz0ibmV3c2xldHRlcl9fbm90ZSI+Sm9pbiA1LDAwMCsgZGV2ZWxvcGVycyBhbHJlYWR5IHN1YnNjcmliZWQuPC9wPgogICAgPC9kaXY+CiAgPC9kaXY+Cjwvc2VjdGlvbj4="
+    },
+    "source_css": ".newsletter { padding: 5rem 0; }\n.newsletter__inner { max-width: 560px; margin: 0 auto; text-align: center; }\n.newsletter__inner h2 { font-size: 1.875rem; margin-bottom: 0.75rem; }\n.newsletter__inner > p { opacity: 0.75; margin-bottom: 1.75rem; }\n.newsletter__form { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }\n.newsletter__input { flex: 1; min-width: 220px; padding: 0.65rem 1rem; border-radius: 6px; border: 1.5px solid var(--color-border, #e2e8f0); background: transparent; color: inherit; font-size: 1rem; outline: none; }\n.newsletter__input:focus { border-color: var(--color-primary, #2563eb); }\n.newsletter__note { font-size: 0.8rem; opacity: 0.5; margin-top: 1rem; }"
+  }
+}

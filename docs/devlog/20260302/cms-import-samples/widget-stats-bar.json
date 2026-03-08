@@ -1,0 +1,16 @@
+{
+  "type": "cms_widget",
+  "version": 1,
+  "data": {
+    "slug": "stats-bar",
+    "name": "Stats Bar — Social Proof Numbers",
+    "widget_type": "html",
+    "sort_order": 30,
+    "is_active": true,
+    "config": null,
+    "content_json": {
+      "content": "PHNlY3Rpb24gY2xhc3M9InN0YXRzLWJhciI+CiAgPGRpdiBjbGFzcz0iY29udGFpbmVyIj4KICAgIDxkaXYgY2xhc3M9InN0YXRzLWJhcl9fZ3JpZCI+CiAgICAgIDxkaXYgY2xhc3M9InN0YXQiPjxzcGFuIGNsYXNzPSJzdGF0X192YWx1ZSI+MTAsMDAwKzwvc3Bhbj48c3BhbiBjbGFzcz0ic3RhdF9fbGFiZWwiPkhhcHB5IEN1c3RvbWVyczwvc3Bhbj48L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0ic3RhdCI+PHNwYW4gY2xhc3M9InN0YXRfX3ZhbHVlIj45OS45JTwvc3Bhbj48c3BhbiBjbGFzcz0ic3RhdF9fbGFiZWwiPlVwdGltZSBTTEE8L3NwYW4+PC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InN0YXQiPjxzcGFuIGNsYXNzPSJzdGF0X192YWx1ZSI+MTUwKzwvc3Bhbj48c3BhbiBjbGFzcz0ic3RhdF9fbGFiZWwiPkNvdW50cmllczwvc3Bhbj48L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0ic3RhdCI+PHNwYW4gY2xhc3M9InN0YXRfX3ZhbHVlIj4yNC83PC9zcGFuPjxzcGFuIGNsYXNzPSJzdGF0X19sYWJlbCI+U3VwcG9ydDwvc3Bhbj48L2Rpdj4KICAgIDwvZGl2PgogIDwvZGl2Pgo8L3NlY3Rpb24+"
+    },
+    "source_css": ".stats-bar { padding: 3rem 0; background: var(--color-surface, #f8fafc); border-top: 1px solid var(--color-border, #e2e8f0); border-bottom: 1px solid var(--color-border, #e2e8f0); }\n.stats-bar__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 2rem; text-align: center; }\n.stat__value { display: block; font-size: 2.25rem; font-weight: 800; color: var(--color-primary, #2563eb); }\n.stat__label { display: block; font-size: 0.875rem; opacity: 0.65; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }"
+  }
+}

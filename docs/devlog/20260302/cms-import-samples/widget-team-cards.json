@@ -1,0 +1,16 @@
+{
+  "type": "cms_widget",
+  "version": 1,
+  "data": {
+    "slug": "team-cards",
+    "name": "Team — Cards Grid",
+    "widget_type": "html",
+    "sort_order": 31,
+    "is_active": true,
+    "config": null,
+    "content_json": {
+      "content": "PHNlY3Rpb24gY2xhc3M9InRlYW0iPgogIDxkaXYgY2xhc3M9ImNvbnRhaW5lciI+CiAgICA8aDIgY2xhc3M9InRlYW1fX3RpdGxlIj5NZWV0IHRoZSBUZWFtPC9oMj4KICAgIDxkaXYgY2xhc3M9InRlYW1fX2dyaWQiPgogICAgICA8ZGl2IGNsYXNzPSJ0ZWFtLWNhcmQiPgogICAgICAgIDxkaXYgY2xhc3M9InRlYW0tY2FyZF9fYXZhdGFyIj4mI3gxRjQ2OTsmI3gyMDBEOyYjeDFGNEJCOzwvZGl2PgogICAgICAgIDxoMyBjbGFzcz0idGVhbS1jYXJkX19uYW1lIj5Bbm5hIE11bGxlcjwvaDM+CiAgICAgICAgPHAgY2xhc3M9InRlYW0tY2FyZF9fcm9sZSI+Q2hpZWYgRXhlY3V0aXZlIE9mZmljZXI8L3A+CiAgICAgICAgPHAgY2xhc3M9InRlYW0tY2FyZF9fYmlvIj4xMCB5ZWFycyBidWlsZGluZyBkZXZlbG9wZXIgdG9vbHMuIFByZXZpb3VzbHkgYXQgU2hvcGlmeSBhbmQgU3RyaXBlLjwvcD4KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InRlYW0tY2FyZCI+CiAgICAgICAgPGRpdiBjbGFzcz0idGVhbS1jYXJkX19hdmF0YXIiPiYjeDFGNDY4OyYjeDIwMEQ7JiN4MUY1MkM7PC9kaXY+CiAgICAgICAgPGgzIGNsYXNzPSJ0ZWFtLWNhcmRfX25hbWUiPkRtaXRyaSBWb2xrb3Y8L2gzPgogICAgICAgIDxwIGNsYXNzPSJ0ZWFtLWNhcmRfX3JvbGUiPkNoaWVmIFRlY2hub2xvZ3kgT2ZmaWNlcjwvcD4KICAgICAgICA8cCBjbGFzcz0idGVhbS1jYXJkX19iaW8iPk9wZW4gc291cmNlIGNvbnRyaWJ1dG9yLiBQeXRob24gYW5kIHN5c3RlbXMgcHJvZ3JhbW1pbmcgZXhwZXJ0LjwvcD4KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InRlYW0tY2FyZCI+CiAgICAgICAgPGRpdiBjbGFzcz0idGVhbS1jYXJkX19hdmF0YXIiPiYjeDFGNDY5OyYjeDIwMEQ7JiN4MUYzQTg7PC9kaXY+CiAgICAgICAgPGgzIGNsYXNzPSJ0ZWFtLWNhcmRfX25hbWUiPlNvcGhpZSBMYXVyZW50PC9oMz4KICAgICAgICA8cCBjbGFzcz0idGVhbS1jYXJkX19yb2xlIj5IZWFkIG9mIERlc2lnbjwvcD4KICAgICAgICA8cCBjbGFzcz0idGVhbS1jYXJkX19iaW8iPlVYIHJlc2VhcmNoZXIgYW5kIGludGVyZmFjZSBkZXNpZ25lci4gUGFzc2lvbmF0ZSBhYm91dCBhY2Nlc3NpYmxlIHNvZnR3YXJlLjwvcD4KICAgICAgPC9kaXY+CiAgICA8L2Rpdj4KICA8L2Rpdj4KPC9zZWN0aW9uPg=="
+    },
+    "source_css": ".team { padding: 5rem 0; }\n.team__title { text-align: center; font-size: 2rem; margin-bottom: 3rem; }\n.team__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 2rem; }\n.team-card { padding: 2rem; border-radius: 12px; background: var(--color-surface, #f8fafc); border: 1px solid var(--color-border, #e2e8f0); text-align: center; }\n.team-card__avatar { font-size: 4rem; margin-bottom: 1rem; }\n.team-card__name { font-size: 1.15rem; margin-bottom: 0.25rem; }\n.team-card__role { font-size: 0.85rem; color: var(--color-primary, #2563eb); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }\n.team-card__bio { font-size: 0.9rem; opacity: 0.75; }"
+  }
+}
