@@ -1,4 +1,4 @@
-.PHONY: up down up-build rebuild-backend rebuild-admin rebuild-user logs ps clean npm-install
+.PHONY: up down up-build rebuild-backend rebuild-admin rebuild-user total-rebuild logs ps clean npm-install
 
 # Install npm dependencies for all frontend packages
 npm-install:
@@ -66,3 +66,22 @@ reset-db:
 	cd vbwd-backend && ./bin/reset-database.sh
 	cd vbwd-backend/plugins/taro && ./bin/populate-db.sh
 	cd vbwd-backend/plugins/cms && ./bin/populate-db.sh
+	cd vbwd-backend/plugins/ghrm && ./bin/populate-db.sh
+
+total-rebuild:
+	$(MAKE) down
+	$(MAKE) rebuild-core
+	$(MAKE) rebuild-admin
+	$(MAKE) rebuild-user
+	$(MAKE) rebuild-backend
+	@echo "Waiting for api service to be healthy..."
+	@cd vbwd-backend && until docker compose exec -T api python -c "import sys; sys.exit(0)" 2>/dev/null; do \
+		echo "  api not ready yet, retrying in 3s..."; \
+		sleep 3; \
+	done
+	@echo "api is ready"
+	cd vbwd-backend && ./bin/reset-database.sh --force
+	cd vbwd-backend/plugins/taro && ./bin/populate-db.sh
+	cd vbwd-backend/plugins/cms && ./bin/populate-db.sh
+	cd vbwd-backend/plugins/ghrm && ./bin/populate-db.sh
+	@echo "Total rebuild complete"
