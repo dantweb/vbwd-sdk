@@ -8,9 +8,12 @@
 | 02 | Code Quality — vbwd-fe-admin | ✅ Done | `reports/03-fe-admin-quality-sprint-report.md` |
 | 03 | Code Quality — vbwd-fe-user | ✅ Done | `reports/04-fe-user-quality-sprint-report.md` |
 | 04 | Billing Gaps — recurring billing & subscription lifecycle | ⏳ Pending approval | — |
-| 05 | Email System — templates, SMTP, Mailchimp demo, Mailpit | ⏳ Pending approval | — |
-| — | GHRM Production Fix — real GitHub client, 500 on catalogue, mock cleanup | ✅ Done | `reports/05-ghrm-production-fix-report.md` |
-| — | Root Makefile — `make unit`, `make integration`, `make styles` | ✅ Done | — |
+| 05 | Email System — templates, SMTP, Mailchimp demo, Mailpit | ✅ Done | — |
+| 06 | Fix "Get Package" button — wrong ID, no context, anonymous redirect | ⏳ Pending approval | `sprints/06-fix-get-package-button.md` |
+| 07 | GHRM Breadcrumb Widgets — CMS-style widgets, 3-tab admin config (General/CSS/Preview) | ⏳ Pending approval | `sprints/07-ghrm-breadcrumb-widgets.md` |
+| 08 | CMS Routing Rules — default page, language/IP/country routing, nginx hybrid, admin UI | ⏳ Pending approval | `sprints/08-cms-routing-rules.md` |
+| — | GHRM Plugin v1 — production fix, partial sync, preview, markdown, plugin manager bug | ✅ Done | `reports/06-ghrm-plugin-completion-report.md` |
+| — | Root Makefile — `make unit`, `make integration`, `make styles`, `make code-rebuild` | ✅ Done | — |
 
 ---
 
@@ -99,17 +102,23 @@
 
 ---
 
-## Sprint 05 — Email System ⏳ PENDING APPROVAL
+## Sprint 05 — Email System ✅ DONE
 
-**Sprint doc:** `sprints/05-email-system.md`
+**Completed:** 2026-03-14
 
 ### Steps
 
 | Step | Description | Status |
 |------|-------------|--------|
-| 1 | Backend `email` plugin — model, service, SMTP sender, event contexts, admin API routes | ⏳ |
-| 2 | Backend `mailchimp` plugin — Mandrill transport demo (reference implementation) | ⏳ |
-| 3 | fe-admin `email-admin` plugin — CodeMirror HTML/text editor, preview tabs | ⏳ |
-| 4 | fe-admin settings — "Integrations → Email" tab (SMTP config, sender selector, log flag) | ⏳ |
-| 5 | Mailpit service in `docker-compose.yaml` for local email testing | ⏳ |
-| 6 | fe-admin navigation — "Email Templates" link under new "Messaging" group | ⏳ |
+| 1 | Backend `email` plugin — `EmailTemplate` model, `IEmailSender`/`EmailMessage` interface, `EmailSenderRegistry`, `SmtpEmailSender`, `EmailService` (Jinja2 rendering), `EVENT_CONTEXTS` (8 events), `seeds.py`, admin API routes (6 endpoints) | ✅ |
+| 2 | Backend `mailchimp` plugin — `MandrillEmailSender` (Liskov-substitutable reference implementation) | ✅ |
+| 3 | fe-admin `email-admin` plugin — `EmailTemplateList.vue`, `EmailTemplateEdit.vue` (3-tab HTML/Text/Preview), `useEmailStore.ts` | ✅ |
+| 4 | fe-admin nav — "Messaging → Email Templates" group added via `extensionRegistry` | ✅ |
+| 5 | Mailpit service in `docker-compose.yaml` (port 8025 UI / 1025 SMTP) | ✅ |
+| 6 | Alembic migration `20260314_create_email_template_table.py` | ✅ |
+
+### Tests
+- 23 unit tests (registry, smtp sender, email service) — all ✅
+- 28 integration tests (security, CRUD, preview, migration schema, edge cases) — all ✅
+- fe-admin: `emailAdminPlugin.spec.ts` (pluginLoader contract, install/activate/deactivate), `EmailTemplateList.spec.ts`
+- Full pre-commit: `--full` → **PASS** (1121 unit ✓, 82 integration ✓, lint ✓)
