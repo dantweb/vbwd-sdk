@@ -200,28 +200,49 @@ Services are wired via `dependency-injector` in `container.py`. This is used for
 
 ### 3.6 Event System
 
-The `EventDispatcher` provides a simple pub/sub bus used by the `PluginManager` and subscription lifecycle:
+The platform has two event subsystems that work together:
+
+| System | Location | Purpose |
+|---|---|---|
+| `DomainEventDispatcher` | `src/events/domain.py` | Typed `IEventHandler` objects for core business logic |
+| `EventBus` | `src/events/bus.py` | Callback-based pub/sub for plugins |
+
+**`DomainEventDispatcher`** is used by core services to emit structured domain events:
 
 ```python
-from src.events.dispatcher import EventDispatcher, Event
+from src.events.domain import DomainEventDispatcher, IEventHandler, EventResult
+from src.events.subscription_events import SubscriptionActivatedEvent
 
-dispatcher = EventDispatcher()
+# Register a typed handler (core services only)
+dispatcher = DomainEventDispatcher()
+dispatcher.register("subscription.activated", MyTypedHandler())
 
-# Subscribe
-@dispatcher.on("subscription.activated")
-def handle_activated(event: Event):
-    user_id = event.data["user_id"]
-    plan_id = event.data["plan_id"]
-    # grant access, credit tokens, etc.
-
-# Dispatch
-dispatcher.dispatch(Event(
+# Emit — runs typed handlers, then forwards to EventBus automatically
+dispatcher.emit(SubscriptionActivatedEvent(
     name="subscription.activated",
-    data={"user_id": str(user.id), "plan_id": str(plan.id)}
+    data={"user_id": str(user.id), "plan_id": str(plan.id)},
 ))
 ```
 
-Plugins hook into subscription lifecycle events to implement their own access logic (e.g., GHRM grants GitHub access on `subscription.activated`).
+**`EventBus`** is used by plugins. After `DomainEventDispatcher.emit()` runs its typed handlers, it automatically calls `event_bus.publish(event.name, event.data)` — the bridge requires no call-site changes. Plugins subscribe in `register_event_handlers(bus)` (see §4.3 and §4.9).
+
+```python
+from src.events import event_bus
+
+# Subscribe (from a plugin's register_event_handlers)
+event_bus.subscribe("subscription.activated", my_callback)
+
+# Publish a plugin-to-plugin event
+event_bus.publish("my_plugin.thing_happened", {"item_id": str(item.id)})
+```
+
+**Import:**
+```python
+from src.events import event_bus          # EventBus singleton
+from src.events import DomainEventDispatcher, IEventHandler, DomainEvent
+```
+
+See `docs/dev_docs/event-bus.md` for the full reference.
 
 ### 3.7 Migrations
 
@@ -315,11 +336,23 @@ class MyPlugin(BasePlugin):
         ]
 
     def on_enable(self) -> None:
-        """Subscribe to events, start background tasks, etc."""
+        """Set up non-event resources (e.g. register email template schemas)."""
         pass
 
     def on_disable(self) -> None:
         """Clean up resources."""
+        pass
+
+    def register_event_handlers(self, bus) -> None:
+        """Subscribe to EventBus events.
+
+        Called by PluginManager.enable_plugin() after on_enable().
+        Override to subscribe to domain events forwarded by the bridge or
+        to plugin-to-plugin events published via event_bus.publish().
+
+        Args:
+            bus: The EventBus singleton — call bus.subscribe(event_name, callback).
+        """
         pass
 ```
 
@@ -445,16 +478,22 @@ Plugins can subscribe to subscription lifecycle events to implement access contr
 
 Example (from GHRM plugin):
 ```python
-def on_enable(self):
-    dispatcher = current_app.extensions["event_dispatcher"]
-    dispatcher.on("subscription.activated", self._grant_github_access)
-    dispatcher.on("subscription.cancelled", self._start_grace_period)
+def register_event_handlers(self, bus) -> None:
+    """Called by PluginManager after on_enable()."""
+    bus.subscribe("subscription.activated", self._grant_github_access)
+    bus.subscribe("subscription.cancelled", self._start_grace_period)
 
-def _grant_github_access(self, event: Event):
-    user_id = event.data["user_id"]
-    plan_id = event.data["plan_id"]
+def _grant_github_access(self, event_name: str, data: dict) -> None:
+    user_id = data.get("user_id")
+    plan_id = data.get("plan_id")
     # add GitHub collaborator via GitHub App API
+
+def _start_grace_period(self, event_name: str, data: dict) -> None:
+    user_id = data.get("user_id")
+    # schedule access revocation after grace_period_days
 ```
+
+Domain events (`subscription.activated`, `subscription.cancelled`, etc.) are forwarded from `DomainEventDispatcher.emit()` to the `EventBus` automatically — no core code changes are needed. The callback signature is `(event_name: str, data: dict)`, where `data` is the plain dict from the domain event's `.data` attribute.
 
 ---
 

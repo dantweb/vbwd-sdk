@@ -460,6 +460,38 @@ Follow these steps to add a new cross-stack feature as a bundle.
        def get_url_prefix(self): return ""
    ```
 
+   If the bundle reacts to subscription lifecycle events, add `register_event_handlers`:
+   ```python
+   def on_enable(self) -> None:
+       # Register email template variable schemas (no bus needed here)
+       from plugins.email.src.services.event_context_registry import EventContextRegistry
+       EventContextRegistry.register("my_feature.access_granted", {
+           "description": "Sent when feature access is granted",
+           "variables": {
+               "user_email": {"type": "string", "example": "alice@example.com",
+                              "description": "Recipient address"},
+               "feature_name": {"type": "string", "example": "My Feature",
+                                "description": "Name of the granted feature"},
+           },
+       })
+
+   def register_event_handlers(self, bus) -> None:
+       """Called by PluginManager after on_enable() — subscribe here, not in on_enable."""
+       bus.subscribe("subscription.activated", self._on_activated)
+       bus.subscribe("subscription.cancelled", self._on_cancelled)
+
+   def _on_activated(self, event_name: str, data: dict) -> None:
+       user_id = data.get("user_id")
+       plan_id = data.get("plan_id")
+       # grant feature access ...
+
+   def _on_cancelled(self, event_name: str, data: dict) -> None:
+       user_id = data.get("user_id")
+       # start grace period ...
+   ```
+
+   See `docs/dev_docs/event-bus.md` for the full EventBus reference.
+
 2. Create models in `plugins/<name>/src/models/`
 3. Create repositories and services
 4. Create `routes.py` with both public (`/api/v1/my-feature/`) and admin (`/api/v1/admin/my-feature/`) endpoints
@@ -533,6 +565,7 @@ Use this checklist when shipping a new bundle:
 - [ ] Unit tests for all services (mocked repositories)
 - [ ] Integration tests for all routes
 - [ ] Idempotent populate script
+- [ ] Event handlers subscribed in `register_event_handlers(bus)`, not `on_enable()`
 
 **Admin Plugin**
 - [ ] Routes added under `/admin/<feature>/`
