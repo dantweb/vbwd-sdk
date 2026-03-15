@@ -42,7 +42,7 @@ COMMAND="${1:-upgrade}"
 case "$COMMAND" in
     upgrade)
         echo "Running database migrations..."
-        docker compose exec -T api alembic upgrade head
+        docker compose exec -T api alembic upgrade heads
         if [ $? -eq 0 ]; then
             echo "Migrations completed successfully!"
         else

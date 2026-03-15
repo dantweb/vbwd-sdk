@@ -60,7 +60,7 @@ ps:
 	@echo "=== Frontend Admin ===" && cd vbwd-fe-admin && docker compose ps
 
 migrations:
-	cd vbwd-backend && docker compose exec api alembic upgrade head
+	cd vbwd-backend && docker compose exec api alembic upgrade heads
 
 reset-db:
 	cd vbwd-backend && ./bin/reset-database.sh

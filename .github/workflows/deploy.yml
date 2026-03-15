@@ -232,7 +232,7 @@ jobs:
             wait $PID_FE_ADMIN || { echo "Failed to pull vbwd_fe_admin"; exit 1; }
 
             echo "Images pulled. Running migrations..."
-            docker compose run --rm vbwd_backend alembic upgrade head
+            docker compose run --rm vbwd_backend alembic upgrade heads
 
             echo "Restarting containers..."
             docker compose up -d --remove-orphans --no-deps --force-recreate

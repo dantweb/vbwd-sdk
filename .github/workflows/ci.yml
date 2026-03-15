@@ -102,7 +102,7 @@ jobs:
             -e FLASK_ENV=testing \
             -v $(pwd):/app \
             vbwd-backend-test \
-            alembic upgrade head
+            alembic upgrade heads
 
       - name: Run unit tests
         working-directory: vbwd-backend
@@ -164,7 +164,7 @@ jobs:
 
       - name: Run database migrations
         working-directory: vbwd-backend
-        run: docker compose exec -T api alembic upgrade head
+        run: docker compose exec -T api alembic upgrade heads
 
       - name: Seed test data
         working-directory: vbwd-backend
@@ -367,7 +367,7 @@ jobs:
 #      - name: Run database migrations and seed data
 #        working-directory: vbwd-backend
 #        run: |
-#          docker compose exec -T api alembic upgrade head
+#          docker compose exec -T api alembic upgrade heads
 #          docker compose exec -T \
 #            -e TEST_DATA_SEED=true \
 #            api flask --app src.app:create_app seed-test-data \
