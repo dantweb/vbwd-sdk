@@ -14,7 +14,7 @@
 | 09 | Plugin Event Bus — unified EventBus, domain→bus bridge, EventContextRegistry, fix broken email events | ⏳ Pending approval | `sprints/09-plugin-event-bus.md` |
 | 08 | CMS Routing Rules — default page, language/IP/country routing, nginx hybrid, admin UI | ⏳ Pending approval | `sprints/08-cms-routing-rules.md` |
 | 10 | VBWD Org — GitHub org creation, repo transfers, plugin docs, public plugin repos | ⏳ Pending approval | `sprints/10-vbwd-org-and-plugin-repos.md` |
-| 11 | Tarif Plan Detail Page — subscription row click, plan detail view, GHRM Software + GitHub Access tabs | ⏳ Pending approval | `sprints/11-tarif-plan-detail-page.md` |
+| 11 | Tarif Plan Detail Page — subscription row click, plan detail view, GHRM Software + GitHub Access tabs | ✅ Done | `reports/11-tarif-plan-detail-page-report.md` |
 | — | GHRM Plugin v1 — production fix, partial sync, preview, markdown, plugin manager bug | ✅ Done | `reports/06-ghrm-plugin-completion-report.md` |
 | — | Root Makefile — `make unit`, `make integration`, `make styles`, `make code-rebuild` | ✅ Done | — |
 
