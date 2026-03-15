@@ -801,3 +801,55 @@ vbwd-fe-user/
 - [ ] GitHub Actions: nginx config validation workflow passes
 - [ ] Manual smoke test: create middleware rule → visit `/` → redirect fires
 - [ ] Manual smoke test: create nginx rule → "Apply & Reload" → nginx reload logged
+
+---
+
+## Engineering Requirements
+
+| Principle | Rule |
+|-----------|------|
+| **TDD** | Tests written before or alongside implementation. No step is done without passing tests. |
+| **SOLID** | Single responsibility per component/service. Open for extension, closed for modification. |
+| **DI** | Backend: services receive repositories via constructor, no `db.session` inside service methods. Frontend: composables and stores inject dependencies. |
+| **DRY** | Reuse existing middleware and route resolver patterns. No duplicate routing logic. |
+| **Liskov** | All routing rule implementations honour the `IRoutingRule` contract. |
+| **Clean code** | No `console.log`, no `as any`, no bare `except: pass`. Explicit types everywhere. |
+| **No over-engineering** | Minimum complexity for the current task. No speculative abstractions. |
+| **Drop deprecated** | Use current Flask, SQLAlchemy 2.0, and Vue 3 APIs only. |
+
+---
+
+## Pre-commit Checks
+
+Run after every step before marking it done.
+
+### vbwd-backend (`vbwd-backend/`)
+```bash
+# Lint only (Black + Flake8 + Mypy)
+./bin/pre-commit-check.sh --lint
+
+# Lint + unit tests
+./bin/pre-commit-check.sh --unit
+
+# Lint + integration tests (requires running PostgreSQL)
+./bin/pre-commit-check.sh --integration
+
+# Full (lint + unit + integration)
+./bin/pre-commit-check.sh --full
+```
+
+### fe-user (`vbwd-fe-user/`)
+```bash
+./bin/pre-commit-check.sh --style
+./bin/pre-commit-check.sh --unit
+./bin/pre-commit-check.sh --all
+```
+
+### fe-admin (`vbwd-fe-admin/`)
+```bash
+./bin/pre-commit-check.sh --style
+./bin/pre-commit-check.sh --unit    # runs vue/tests/unit/ plugins/
+./bin/pre-commit-check.sh --all
+```
+
+All checks must pass before the sprint is considered complete.

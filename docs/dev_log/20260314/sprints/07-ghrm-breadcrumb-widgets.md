@@ -120,3 +120,50 @@ Renders the full GHRM detail page (or catalog page, depending on context) with t
 - "CMS widgets" here means GHRM's own widget concept inspired by CMS — NOT modifying `plugins/cms/`
 - If the CMS plugin exposes a public widget registration API in the future, GHRM can migrate to it; for now GHRM owns its widget registry entirely
 - The 3-tab admin panel pattern (General / CSS / Preview) is the standard for all future GHRM layout widgets
+
+---
+
+## Engineering Requirements
+
+| Principle | Rule |
+|-----------|------|
+| **TDD** | Tests written before or alongside implementation. No step is done without passing tests. |
+| **SOLID** | Single responsibility per component/service. Open for extension, closed for modification. |
+| **DI** | Backend: services receive repositories via constructor, no `db.session` inside service methods. Frontend: composables and stores inject dependencies. |
+| **DRY** | Reuse existing Vue components and store patterns. No duplicate logic. |
+| **Liskov** | All widget implementations honour the widget interface contract. |
+| **Clean code** | No `console.log`, no `as any`. Explicit TypeScript types on all props, emits, and store actions. |
+| **No over-engineering** | Minimum complexity for the current task. No speculative abstractions. |
+| **Drop deprecated** | Use current Vue 3 / Vite / marked APIs only. |
+
+---
+
+## Pre-commit Checks
+
+Run after every step before marking it done.
+
+### fe-user (`vbwd-fe-user/`)
+```bash
+# Style checks (ESLint + TypeScript)
+./bin/pre-commit-check.sh --style
+
+# Style + unit tests  (runs vue/tests/unit/)
+./bin/pre-commit-check.sh --unit
+
+# Full
+./bin/pre-commit-check.sh --all
+```
+
+### fe-admin (`vbwd-fe-admin/`)
+```bash
+# Style checks
+./bin/pre-commit-check.sh --style
+
+# Style + unit tests  (runs vue/tests/unit/ plugins/)
+./bin/pre-commit-check.sh --unit
+
+# Full
+./bin/pre-commit-check.sh --all
+```
+
+All checks must pass before the sprint is considered complete.
