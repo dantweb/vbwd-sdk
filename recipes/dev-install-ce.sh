@@ -212,6 +212,12 @@ for plugin in analytics chat cms email ghrm mailchimp paypal stripe taro yookass
 done
 echo "✓ Backend plugins installed"
 
+# Initialize plugins.json from dist if not present
+if [ ! -f "$BACKEND_DIR/plugins/plugins.json" ]; then
+    cp "$BACKEND_DIR/plugins/plugins.json.dist" "$BACKEND_DIR/plugins/plugins.json"
+    echo "✓ plugins.json created from plugins.json.dist"
+fi
+
 # Clone and setup frontend repositories (3 independent repos with submodules)
 echo ""
 echo "=========================================="
