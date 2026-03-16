@@ -59,11 +59,11 @@ fi
 echo "Workspace: $WORKSPACE_DIR"
 
 # Configuration
-BACKEND_REPO="https://github.com/dantweb/vbwd-backend.git"
+BACKEND_REPO="https://github.com/VBWD-platform/vbwd-backend.git"
 # Frontend repositories (split into 3 independent repos with git submodules)
-FE_CORE_REPO="https://github.com/dantweb/vbwd-fe-core.git"
-FE_USER_REPO="https://github.com/dantweb/vbwd-fe-user.git"
-FE_ADMIN_REPO="https://github.com/dantweb/vbwd-fe-admin.git"
+FE_CORE_REPO="https://github.com/VBWD-platform/vbwd-fe-core.git"
+FE_USER_REPO="https://github.com/VBWD-platform/vbwd-fe-user.git"
+FE_ADMIN_REPO="https://github.com/VBWD-platform/vbwd-fe-admin.git"
 
 BACKEND_DIR="$WORKSPACE_DIR/vbwd-backend"
 FE_CORE_DIR="$WORKSPACE_DIR/vbwd-fe-core"
