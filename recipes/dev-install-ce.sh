@@ -142,12 +142,13 @@ echo "=========================================="
 echo "Step 1: Setting up vbwd-backend"
 echo "=========================================="
 
-if [ -d "$BACKEND_DIR" ]; then
+if [ -d "$BACKEND_DIR/.git" ]; then
     echo "Backend directory already exists, pulling latest changes..."
     cd "$BACKEND_DIR"
     git pull origin main || true
 else
     echo "Cloning vbwd-backend..."
+    rm -rf "$BACKEND_DIR"
     git clone --branch main "$BACKEND_REPO" "$BACKEND_DIR"
     cd "$BACKEND_DIR"
 fi
@@ -202,12 +203,13 @@ echo ""
 echo "Step 2a: Setting up vbwd-fe-core (shared component library)"
 echo "==========================================================="
 
-if [ -d "$FE_CORE_DIR" ]; then
+if [ -d "$FE_CORE_DIR/.git" ]; then
     echo "Core library directory already exists, pulling latest changes..."
     cd "$FE_CORE_DIR"
     git pull origin main || true
 else
     echo "Cloning vbwd-fe-core..."
+    rm -rf "$FE_CORE_DIR"
     git clone "$FE_CORE_REPO" "$FE_CORE_DIR"
     cd "$FE_CORE_DIR"
 fi
@@ -233,13 +235,14 @@ echo ""
 echo "Step 2b: Setting up vbwd-fe-user (user-facing app)"
 echo "=================================================="
 
-if [ -d "$FE_USER_DIR" ]; then
+if [ -d "$FE_USER_DIR/.git" ]; then
     echo "User app directory already exists, updating submodules..."
     cd "$FE_USER_DIR"
     git pull origin main || true
     git submodule update --init --recursive || true
 else
     echo "Cloning vbwd-fe-user with submodules..."
+    rm -rf "$FE_USER_DIR"
     git clone --recurse-submodules "$FE_USER_REPO" "$FE_USER_DIR"
     cd "$FE_USER_DIR"
 fi
@@ -265,13 +268,14 @@ echo ""
 echo "Step 2c: Setting up vbwd-fe-admin (admin backoffice)"
 echo "===================================================="
 
-if [ -d "$FE_ADMIN_DIR" ]; then
+if [ -d "$FE_ADMIN_DIR/.git" ]; then
     echo "Admin app directory already exists, updating submodules..."
     cd "$FE_ADMIN_DIR"
     git pull origin main || true
     git submodule update --init --recursive || true
 else
     echo "Cloning vbwd-fe-admin with submodules..."
+    rm -rf "$FE_ADMIN_DIR"
     git clone --recurse-submodules "$FE_ADMIN_REPO" "$FE_ADMIN_DIR"
     cd "$FE_ADMIN_DIR"
 fi
