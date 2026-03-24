@@ -16,6 +16,7 @@
 | Import/Export + Event Export | [02e-booking-import-export.md](02e-booking-import-export.md) | `vbwd-plugin-booking` + admin plugin |
 | Custom Schemas | [02f-booking-custom-schemas.md](02f-booking-custom-schemas.md) | `vbwd-plugin-booking` + both frontend plugins |
 | Resource Image Gallery | [02g-booking-resource-image-gallery.md](02g-booking-resource-image-gallery.md) | `vbwd-plugin-booking` + admin + user plugins |
+| Availability Editor | [02h-booking-availability-editor.md](02h-booking-availability-editor.md) | `vbwd-fe-admin-plugin-booking` + backend (minor) |
 
 ## Engineering Principles (all modules)
 
